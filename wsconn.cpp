@@ -321,14 +321,12 @@ append64Encoded( std::string *encoded, const void *data, size_t size )
         return;
     }
 
-    BIO* bio = BIO_new( BIO_s_mem() );
+    auto_scope< BIO *, BIODeleter > bio( BIO_new( BIO_s_mem() ) );
 
     if( !bio )
     {
         throw std::bad_alloc();
     }
-
-    auto_scope< BIO *, BIODeleter > scoped_bio( bio );
 
     BIO* base64 = BIO_new( BIO_f_base64() );
 
@@ -338,7 +336,8 @@ append64Encoded( std::string *encoded, const void *data, size_t size )
     }
 
     BIO_set_flags( base64, BIO_FLAGS_BASE64_NO_NL );
-    dbgVerify( bio = BIO_push( base64, bio ) ); // scoped_bio will take care of freeing both bios (bio and base64).
+    bio.reset( BIO_push( base64, bio.release() ) ); // bio will free all objects
+    dbgAssert( bio );
 
     dbgVerify( BIO_write( bio, data, size ) > 0 );
     dbgVerify( BIO_flush( bio ) > 0 );
