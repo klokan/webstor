@@ -1,7 +1,10 @@
-#include "directory.h"
 #include <sys/types.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include <dirent.h>
 #include <iostream>
+
+#include "directory.h"
 
 namespace webstor {
 
@@ -21,9 +24,18 @@ void PosixDirectoryReader::listFiles( const std::string &directory, std::vector<
         throw std::string("directory '" + directory + "' can't be opened.");
     }
 }
-#endif
+
+bool PosixDirectoryReader::isDirectory( const std::string &directory ) {
+    struct stat buf;
+    if ( stat( directory.c_str(), &buf) != -1 ) {
+        return S_ISDIR( buf.st_mode );
+    }
+    return false;
+}
 
 }
+
+#endif
 
 #ifdef TEST
 
@@ -37,10 +49,14 @@ main( int argc, char **argv )
     }
     try {
         webstor::PosixDirectoryReader directoryReader;
-        std::vector< std::string * > *files = new std::vector< std::string * >();
-        directoryReader.listFiles( std::string( argv[1] ) , files );
-        for (std::vector< std::string * >::iterator iter = files->begin(); iter != files->end(); iter++) {
-            std::cout << **iter << std::endl;
+        if ( directoryReader.isDirectory( std::string( argv[1] ) ) ) {
+            std::vector< std::string * > *files = new std::vector< std::string * >();
+            directoryReader.listFiles( std::string( argv[1] ) , files );
+            for (std::vector< std::string * >::iterator iter = files->begin(); iter != files->end(); iter++) {
+                std::cout << **iter << std::endl;
+            }
+        } else {
+            std::cerr << argv[1] << " is not a directory." << std::endl;
         }
     } catch (std::string & ex) {
         std::cerr << ex << std::endl;
