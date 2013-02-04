@@ -24,6 +24,7 @@
 
 #include "sysutils.h"
 #include "wsconn.h"
+#include "directory.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,6 +34,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <new>
 
 #ifdef _WIN32 
 #define snprintf sprintf_s 
@@ -932,6 +934,48 @@ get( WsConnection *conn, const Options &options, Statistics *stat )
     stat->dataTransfered = response.loadedContentLength;
 }
 
+static void
+uploadFilesInDirectory( WsConfig config, const Options &options, Statistics *stat ) {
+    AsyncMan asyncMan;
+    webstor::PosixDirectoryReader directoryReader;
+    const int connections_count = 5;
+    std::vector<WsConnection *> connections(connections_count);
+    for (int i = 0; i!= connections_count; i++) {
+        connections[i] = new WsConnection( config );
+    }
+    std::vector< std::string * > *files = new std::vector< std::string * >();
+    directoryReader.listFiles( options.filename, files );
+    for (std::vector< std::string * >::iterator iter = files->begin(); iter != files->end(); iter++)
+    {
+        std::cout << **iter << std::endl;
+        // TODO: delete the filepath after completion
+        std::string *filepath = new std::string(options.filename + "/" + **iter);
+        std::ifstream is;
+        is.open( filepath->c_str(), std::ifstream::in | std::ifstream::binary );
+        is.seekg (0, std::ios::end);
+        size_t length = is.tellg();
+        is.seekg (0, std::ios::beg);
+        // TODO: delete the buffer after completion
+        char *buffer = new char [length];
+        is.read (buffer, length);
+        is.close();
+        int index = WsConnection::waitAny( &connections[0], connections_count, 0);
+        if (connections[index]->isAsyncPending()) {
+            WsPutResponse response;
+            connections[index]->completePut(&response);
+        }
+        connections[index]->pendPut(&asyncMan, options.bucketName.c_str(), filepath->c_str(),
+            static_cast< const void * >( buffer ), length,
+            options.makePublic, false );
+    }
+    for (std::vector< WsConnection * >::iterator iter = connections.begin(); iter != connections.end(); iter++) {
+        WsPutResponse response;
+        if ((*iter)->isAsyncPending()) {
+            (*iter)->completePut(&response);
+        }
+    }
+}
+
 //////////////////////////////////////////////////////////////////////////////
 // Execute actions.
 
@@ -1008,7 +1052,13 @@ execute( const Options &options, Statistics *stat )
 #endif
         )
     {        
-        put( &conn, options, stat );
+        // Check if the file is directory
+        DirectoryReader directoryReader;
+        if ( directoryReader.isDirectory( options.filename ) ) {
+            uploadFilesInDirectory( config, options, stat );
+        } else {
+            put( &conn, options, stat );
+        }
         return;
     }
 
