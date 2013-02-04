@@ -3,25 +3,50 @@
 #include <unistd.h>
 #include <dirent.h>
 #include <iostream>
+#include <stdio.h>
+#include <stack>
+#include <string.h>
 
 #include "directory.h"
 
 namespace webstor {
 
 #ifdef __unix__
-void PosixDirectoryReader::listFiles( const std::string &directory, std::vector< std::string * > * result ) {
-    DIR *dir = opendir (directory.c_str());
-    struct dirent *directory_entry;
-    if (dir != NULL)
-    {
-        while ( directory_entry = readdir( dir )  )
+void PosixDirectoryReader::listFiles( const std::string &dir, std::vector< std::string * > * result ) {
+    std::stack< std::string > dir_stack;
+    dir_stack.push( dir );
+    while ( !dir_stack.empty() ) {
+        std::string directory = dir_stack.top();
+        dir_stack.pop();
+        DIR *dir = opendir (directory.c_str());
+        struct dirent *directory_entry;
+        if (dir != NULL)
         {
-            if ( directory_entry->d_type == DT_REG ) {
-                result->push_back( new std::string( directory_entry->d_name ) );
+            while ( directory_entry = readdir( dir )  )
+            {
+                bool rel = (strcmp ( directory.c_str() , "." ) == 0);
+                if ( directory_entry->d_type == DT_REG ) {
+                     if (rel) {
+                         result->push_back( new std::string( directory_entry->d_name ) );
+                     } else {
+                         result->push_back( new std::string( directory + "/" + directory_entry->d_name ) );
+                     }
+                } else if ( directory_entry->d_type == DT_DIR ) {
+                    if ( strcmp (directory_entry->d_name, ".") != 0 && strcmp (directory_entry->d_name, "..") != 0 ) {
+                        if ( rel ) {
+                            std::string new_dir( directory_entry->d_name );
+                            dir_stack.push( new_dir );
+                        } else {
+                            std::string new_dir( directory + "/" + directory_entry->d_name );
+                            dir_stack.push( new_dir );
+                        }
+                    }
+                }
             }
+        } else {
+            throw std::string("directory '" + directory + "' can't be opened.");
         }
-    } else {
-        throw std::string("directory '" + directory + "' can't be opened.");
+        closedir(dir);
     }
 }
 
