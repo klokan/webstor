@@ -52,9 +52,9 @@ static const size_t MB = 1024 * 1024;
 
 static StringWithLen s_cmdFlags = 
 #ifdef WS_CMD_CLI_COMPAT
-    { STRING_WITH_LEN( "-i -s -H -U -P -G -a -f -n -p -m -x -d -z -b -v -help --help -? --? -W -k" ) };
+    { STRING_WITH_LEN( "-i -s -H -U -P -R -G -a -f -n -p -m -x -d -z -b -v -help --help -? --? -W -k" ) };
 #else
-    { STRING_WITH_LEN( "-i -s -H -U -P -G -a -f -n -p -m -x -d -z -b -v -help --help -? --?" ) };
+    { STRING_WITH_LEN( "-i -s -H -U -P -R -G -a -f -n -p -m -x -d -z -b -v -help --help -? --?" ) };
 #endif
 
 static void
@@ -70,6 +70,7 @@ usage()
         "    -H optional region-specific endpoint or a mandatory Walrus host name,      \n"
         "       (it can be specified via WS_HOST env. variable)                         \n"
         "    -P optional port number,                                                   \n"
+        "    -R number of simultaneous asynchronous requests,                           \n"
         "    -U (optional flag to use HTTP instead of HTTPS),                           \n"
         "    -G optional proxy with port number (proxy:port),                           \n"
         "       (it can be specified via WS_PROXY env. variable)                        \n"
@@ -170,6 +171,7 @@ struct Options
         , showUsage( false ) 
         , verbose( false )
         , maxKeys( 0 )
+        , requests ( 5 )
     {}
 
     std::string accKey;
@@ -184,6 +186,7 @@ struct Options
     std::string prefix;
     std::string marker;
     size_t maxKeys;
+    size_t requests;
     std::string delimiter;
     size_t chunkSize;
     bool makePublic;
@@ -333,6 +336,7 @@ parseCommandLine( int argc, char **argv, Options *options )
             tryGetValue( "-H", &i, argc, argv, &options->host ) ||
             tryGetValue( "-U", &i, argc, argv, &options->isHttps, false ) ||
             tryGetValue( "-P", &i, argc, argv, &options->port ) ||
+            tryGetValue( "-R", &i, argc, argv, &options->requests ) ||
             tryGetValue( "-G", &i, argc, argv, &options->proxy ) ||
             tryGetValue( "-a", &i, argc, argv, &options->action ) ||
             tryGetValue( "-f", &i, argc, argv, &options->filename ) ||
@@ -934,12 +938,21 @@ get( WsConnection *conn, const Options &options, Statistics *stat )
     stat->dataTransfered = response.loadedContentLength;
 }
 
+struct Upload {
+    std::string *filepath;
+    char *buffer;
+    
+    Upload():filepath(0),buffer(0){}
+  
+};
+
 static void
 uploadFilesInDirectory( WsConfig config, const Options &options, Statistics *stat ) {
     AsyncMan asyncMan;
     webstor::PosixDirectoryReader directoryReader;
-    const int connections_count = 5;
+    const int connections_count = options.requests;
     std::vector<WsConnection *> connections(connections_count);
+    std::vector<Upload> uploads(connections_count);
     for (int i = 0; i!= connections_count; i++) {
         connections[i] = new WsConnection( config );
     }
@@ -947,26 +960,34 @@ uploadFilesInDirectory( WsConfig config, const Options &options, Statistics *sta
     directoryReader.listFiles( options.filename, files );
     for (std::vector< std::string * >::iterator iter = files->begin(); iter != files->end(); iter++)
     {
-        std::cout << **iter << std::endl;
-        // TODO: delete the filepath after completion
-        std::string *filepath = new std::string(options.filename + "/" + **iter);
+        Upload upload;
+        upload.filepath = new std::string(**iter);
         std::ifstream is;
-        is.open( filepath->c_str(), std::ifstream::in | std::ifstream::binary );
+        is.open( upload.filepath->c_str(), std::ifstream::in | std::ifstream::binary );
         is.seekg (0, std::ios::end);
         size_t length = is.tellg();
         is.seekg (0, std::ios::beg);
-        // TODO: delete the buffer after completion
-        char *buffer = new char [length];
-        is.read (buffer, length);
+        upload.buffer = new char [length];
+        is.read (upload.buffer, length);
         is.close();
         int index = WsConnection::waitAny( &connections[0], connections_count, 0);
         if (connections[index]->isAsyncPending()) {
             WsPutResponse response;
             connections[index]->completePut(&response);
+            Upload cleanMe = uploads[index];
+            if (cleanMe.filepath != NULL) {
+                delete cleanMe.filepath;
+                cleanMe.filepath = NULL;
+            }
+            if (cleanMe.buffer != NULL) {
+                delete[] cleanMe.buffer;
+                cleanMe.buffer = NULL;
+            }
         }
-        connections[index]->pendPut(&asyncMan, options.bucketName.c_str(), filepath->c_str(),
-            static_cast< const void * >( buffer ), length,
+        connections[index]->pendPut(&asyncMan, options.bucketName.c_str(), upload.filepath->c_str(),
+            static_cast< const void * >( upload.buffer ), length,
             options.makePublic, false );
+        uploads[index] = upload;
     }
     for (std::vector< WsConnection * >::iterator iter = connections.begin(); iter != connections.end(); iter++) {
         WsPutResponse response;
