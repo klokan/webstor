@@ -958,8 +958,10 @@ uploadFilesInDirectory( WsConfig config, const Options &options, Statistics *sta
     }
     std::vector< std::string * > *files = new std::vector< std::string * >();
     directoryReader.listFiles( options.filename, files );
+    int iteration = 0;
     for (std::vector< std::string * >::iterator iter = files->begin(); iter != files->end(); iter++)
     {
+        iteration++;
         Upload upload;
         upload.filepath = new std::string(**iter);
         std::ifstream is;
@@ -970,7 +972,7 @@ uploadFilesInDirectory( WsConfig config, const Options &options, Statistics *sta
         upload.buffer = new char [length];
         is.read (upload.buffer, length);
         is.close();
-        int index = WsConnection::waitAny( &connections[0], connections_count, 0);
+        int index = WsConnection::waitAny( &connections[0], connections_count, (iteration % connections_count));
         if (connections[index]->isAsyncPending()) {
             WsPutResponse response;
             connections[index]->completePut(&response);
