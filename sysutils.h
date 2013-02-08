@@ -218,7 +218,7 @@ public:
     // Waits for any, returns -1 if timeout.
     // count must be <= c_maxEventCount.
 
-    enum { c_maxEventCount = 64 };
+    enum { c_maxEventCount = 256 };
 
     static int      waitAny( EventSync **events, size_t count, UInt32 msTimeout = c_infinite ); 
 

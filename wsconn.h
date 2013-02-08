@@ -707,7 +707,7 @@ public:
 
    /// Maximum number of WsConnection's waitAny(..) supports.
 
-   enum { c_maxWaitAny = 64 };
+   enum { c_maxWaitAny = 256 };
 
    ///@brief Waits for any WsConnection to complete async operation, returns -1 if timeout.
    ///@details <b>startFrom</b> specifies connection index to start the check from.
