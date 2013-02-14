@@ -71,6 +71,7 @@ usage()
         "       (it can be specified via WS_HOST env. variable)                         \n"
         "    -P optional port number,                                                   \n"
         "    -R number of simultaneous asynchronous requests,                           \n"
+        "    -T number of threads,                                                      \n"
         "    -U (optional flag to use HTTP instead of HTTPS),                           \n"
         "    -G optional proxy with port number (proxy:port),                           \n"
         "       (it can be specified via WS_PROXY env. variable)                        \n"
@@ -187,6 +188,7 @@ struct Options
     std::string marker;
     size_t maxKeys;
     size_t requests;
+    size_t threads;
     std::string delimiter;
     size_t chunkSize;
     bool makePublic;
@@ -337,6 +339,7 @@ parseCommandLine( int argc, char **argv, Options *options )
             tryGetValue( "-U", &i, argc, argv, &options->isHttps, false ) ||
             tryGetValue( "-P", &i, argc, argv, &options->port ) ||
             tryGetValue( "-R", &i, argc, argv, &options->requests ) ||
+            tryGetValue( "-T", &i, argc, argv, &options->threads ) ||
             tryGetValue( "-G", &i, argc, argv, &options->proxy ) ||
             tryGetValue( "-a", &i, argc, argv, &options->action ) ||
             tryGetValue( "-f", &i, argc, argv, &options->filename ) ||
@@ -948,7 +951,7 @@ struct Upload {
 
 static void
 uploadFilesInDirectory( WsConfig config, const Options &options, Statistics *stat ) {
-    AsyncMan asyncMan;
+    AsyncMan asyncMan(options.threads);
     webstor::PosixDirectoryReader directoryReader;
     const int connections_count = options.requests;
     std::vector<WsConnection *> connections(connections_count);
@@ -973,6 +976,7 @@ uploadFilesInDirectory( WsConfig config, const Options &options, Statistics *sta
         is.read (upload.buffer, length);
         is.close();
         int index = WsConnection::waitAny( &connections[0], connections_count, (iteration % connections_count));
+        dbgAssert( index >= 0 && index < connections_count );
         if (connections[index]->isAsyncPending()) {
             WsPutResponse response;
             connections[index]->completePut(&response);
