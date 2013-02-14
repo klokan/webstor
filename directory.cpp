@@ -1,17 +1,21 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <unistd.h>
-#include <dirent.h>
 #include <iostream>
 #include <stdio.h>
 #include <stack>
 #include <string.h>
 
+#ifdef _WIN32
+#include "dirent.h"
+#else
+#include <dirent.h>
+#endif
+
 #include "directory.h"
 
 namespace webstor {
 
-#ifdef __unix__
 void PosixDirectoryReader::listFiles( const std::string &dir, std::vector< std::string * > * result ) {
     std::stack< std::string > dir_stack;
     dir_stack.push( dir );
@@ -59,8 +63,6 @@ bool PosixDirectoryReader::isDirectory( const std::string &directory ) {
 }
 
 }
-
-#endif
 
 #ifdef TEST
 
