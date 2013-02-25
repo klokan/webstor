@@ -28,6 +28,12 @@
 #include <string>
 #include <vector>
 
+#define USE_PEVENTS 1
+
+#if USE_PEVENTS
+#include "pevents.h"
+#endif
+
 namespace webstor
 {
 
@@ -229,7 +235,11 @@ private:
 #ifdef _WIN32
     void           *m_handle;
 #else
+#if USE_PEVENTS
+    neosmart::neosmart_event_t m_handle;
+#else
     int             m_handle;
+#endif
 #endif
 };
 

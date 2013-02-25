@@ -22,6 +22,7 @@
 //////////////////////////////////////////////////////////////////////////////
 
 #include "sysutils.h"
+#include "pevents.h"
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -321,6 +322,68 @@ EventSync::waitAny( EventSync **events, size_t count, UInt32 msTimeout )
 
 #else  // !_WIN32
 
+#if USE_PEVENTS
+EventSync::EventSync( bool initialState )
+{
+    // Create manual-reset event.
+
+    m_handle = neosmart::CreateEvent(true /* manualReset */, initialState ? true : false);
+
+    if( !m_handle )
+    {
+        throwSystemError( (unsigned int) 0, "CreateEvent" );
+    }
+}
+
+EventSync::~EventSync()
+{
+    neosmart::DestroyEvent( m_handle );
+}
+
+void
+EventSync::set()  // nofail
+{
+    dbgVerify( neosmart::SetEvent( m_handle ) );
+}
+
+void
+EventSync::reset()  // nofail
+{
+    dbgVerify( neosmart::ResetEvent( m_handle ) );
+}
+
+bool
+EventSync::wait( UInt32 msTimeout ) const  // nofail
+{
+    int res = WaitForEvent( m_handle, msTimeout );
+    dbgAssert( res == 0 || res == ETIMEDOUT );
+    return res == 0;
+}
+
+int     
+EventSync::waitAny( EventSync **events, size_t count, UInt32 msTimeout )  
+{
+    dbgAssert( implies( count, events ) );
+
+    if ( count > c_maxEventCount )
+    {
+        throw std::runtime_error( "Not supported." );
+    }
+
+    void *handles[ c_maxEventCount ] = {};
+    
+    for( size_t i = 0; i < count; ++i )
+    {
+        dbgAssert( events[ i ] );
+        handles[ i ] = events[ i ]->m_handle;
+    }
+
+    int res = neosmart::WaitForMultipleEvents( (neosmart::neosmart_event_t*) handles, count, false /* waitAll */, msTimeout );
+    dbgAssert( res >= 0 && res < 0 + count || res == ETIMEDOUT );
+
+    return res == ETIMEDOUT ? -1 : res - 0;
+}
+#else
 EventSync::EventSync( bool initialState )
 {
     m_handle = eventfd( initialState ? 1 : 0, EFD_CLOEXEC | EFD_NONBLOCK );
@@ -474,6 +537,7 @@ EventSync::waitAny( EventSync **events, size_t count, UInt32 msTimeout )
 
     return ::webstor::internal::waitAny( &fds[ 0 ], count, msTimeout );
 }
+#endif // USE_PEVENTS
 
 #endif  // !_WIN32
 
@@ -859,6 +923,8 @@ SocketPoolState::~SocketPoolState()
     dbgVerify( !close( epoll ) );
 }
 
+#if USE_PEVENTS
+#else
 SocketPool::SocketPool() 
     : m_pool( NULL )
 {
@@ -940,6 +1006,7 @@ SocketPool::remove( SocketHandle socket )  // nofail
     m_pool->sockets.erase( it );  // nofail
     return true;
 }
+#endif
 
 void
 SocketPool::reserve( size_t size ) 
@@ -1040,7 +1107,8 @@ SocketPool::wait( UInt32 msTimeout, UInt32 msInterruptOnlyTimeout, SocketActions
     {
         const epoll_event &ev = events[ i ];
 
-        if( ev.data.fd == m_interrupt.m_handle )
+        //if( ev.data.fd == m_interrupt.m_handle )
+	if (true) // FIXME
         {
             m_interrupt.reset();
         }
