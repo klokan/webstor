@@ -10,6 +10,8 @@
 #include <pthread.h>
 #include <stdint.h>
 
+#define WFMO
+
 namespace neosmart
 {
 	//Type declarations
