@@ -57,4 +57,4 @@ wsperf: webstor.a
 
 wscmd: webstor.a
 
-webstor.a: webstor.a(asyncurl.o wsconn.o sysutils.o directory.o)
+webstor.a: webstor.a(asyncurl.o wsconn.o sysutils.o directory.o pevents.o)
