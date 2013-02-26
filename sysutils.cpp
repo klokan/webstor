@@ -32,8 +32,10 @@
 #include <mstcpip.h>
 #else  // !_WIN32
 #include <errno.h> 
+#if !USE_PEVENTS
 #include <sys/eventfd.h> 
 #include <sys/epoll.h> 
+#endif
 #include <poll.h>
 #include <pthread.h>
 #include <unistd.h>
@@ -50,6 +52,8 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+
+#define WAIT_OBJECT_0 0
 
 namespace webstor
 {
@@ -891,11 +895,211 @@ SocketPool::wait( UInt32 msTimeout, UInt32 msInterruptOnlyTimeout, SocketActions
 
 #else  // !_WIN32
 
+#if USE_PEVENTS
+
+typedef int SOCKET;
+
+static inline 
+SocketHandle sh( SOCKET socket ) 
+{
+     CASSERT( sizeof( SOCKET ) == sizeof( SocketHandle ) );
+     return ( socket );
+}
+
 static inline 
 int s( SocketHandle socket ) 
 {
     return socket;
 }
+
+struct SocketPoolState : public std::vector< pollfd > {};
+
+SocketPool::SocketPool() 
+    : m_pool( new SocketPoolState() )
+{
+}
+
+void            
+SocketPool::reserve( size_t size ) 
+{ 
+    m_pool->reserve( size ); 
+} 
+
+size_t          
+SocketPool::size() const
+{ 
+    return m_pool->size(); 
+}
+
+static int 
+pollfdLess( const pollfd& v1, const pollfd& v2 )
+{
+    return v1.fd < v2.fd;
+}
+
+bool 
+SocketPool::add( SocketHandle socket, SocketActionMask actionMask )  // nofail
+{
+    //$ WARNING: this is nofail only if SocketPool::reserve was called
+    // to ensure capacity.
+
+    UInt32 events = 
+        ( actionMask & SA_POLL_IN ?  POLLIN : 0 ) |
+        ( actionMask & SA_POLL_OUT ? POLLOUT : 0 );
+
+    pollfd fd = 
+    { 
+        s( socket ), 
+        events, 
+        0 
+    };
+
+    SocketPoolState::iterator it = std::lower_bound( m_pool->begin(), m_pool->end(), fd, pollfdLess );
+
+    if( it == m_pool->end() || it->fd != fd.fd )
+    {
+        // Insert a new socket.
+
+        dbgAssert( m_pool->capacity() > m_pool->size() );
+        m_pool->insert( it, fd );  // nofail because we checked capacity above.
+        return true;
+    }
+
+    // Update event mask on the existing socket.
+
+    it->events = events;
+    return false;
+}
+
+bool
+SocketPool::remove( SocketHandle socket )  // nofail
+{
+    pollfd fd = 
+    { 
+        s( socket ), 
+        0, 
+        0 
+    };
+
+    SocketPoolState::iterator it = std::lower_bound( m_pool->begin(), m_pool->end(), fd, pollfdLess );
+
+    if( it == m_pool->end() || it->fd != fd.fd )
+    {
+        return false;
+    }
+
+    m_pool->erase( it );  // nofail
+    return true;
+}
+
+static inline SocketActionMask
+getActionMask( UInt32 events, UInt32 revents )
+{
+    SocketActionMask actionMask = 0;
+
+    if( events & POLLIN ) 
+    {
+        if( revents & ( POLLRDNORM | POLLIN | POLLERR | POLLHUP ) )
+        {
+            actionMask |= SA_POLL_IN;
+        }
+        if( revents & ( POLLRDBAND | POLLPRI | POLLNVAL ) )
+        {
+            actionMask |= SA_POLL_ERR;
+        }
+    }
+
+    if( events & POLLOUT ) 
+    {
+        if( revents & ( POLLWRNORM | POLLOUT ) )
+        {
+            actionMask |= SA_POLL_OUT;
+        }
+        if( revents & ( POLLERR | POLLHUP | POLLNVAL ) )
+        {
+            actionMask |= SA_POLL_ERR;
+        }
+    }
+
+    return actionMask;
+}
+
+bool
+SocketPool::wait( UInt32 msTimeout, UInt32 msInterruptOnlyTimeout, SocketActions *socketActions )   
+{
+    dbgAssert( socketActions );
+    socketActions->clear();
+
+    if( m_pool->size() == 0 )
+    {
+        // We don't have any sockets to check activity, so wait for 
+        // the interrupt event.
+
+#ifdef PERF
+        Stopwatch stopwatch( true );
+#endif
+
+        int res = neosmart::WaitForEvent( m_interrupt.m_handle, msInterruptOnlyTimeout );
+        dbgAssert( res == WAIT_OBJECT_0 || res == WAIT_TIMEOUT );
+
+#ifdef PERF
+        LOG_TRACE( "SocketPoolSync:wait for interrupt, actual=%llu, result=%d", 
+            stopwatch.elapsed(), res );
+#endif
+
+        m_interrupt.reset();
+        return res == WAIT_OBJECT_0;  // true if interrupt.
+    }
+
+    dbgAssert( msTimeout < INFINITE );
+    const UInt32 spinTimeout = 15;
+
+    while( msTimeout )
+    {
+        // Check the interrupt signal.
+
+        if( m_interrupt.wait( 0 ) )
+        {
+            m_interrupt.reset();
+            return true;  // true if interrupt.
+        }
+        int res = poll( &( ( *m_pool )[ 0 ] ), m_pool->size(), spinTimeout );
+
+        dbgAssert( res >= 0 );
+
+        if( res == 0 )
+        {
+            if ( msTimeout <= spinTimeout )
+            {
+                // Overall timeout has expired.
+
+                break;
+            }
+
+            // Reduce the overall timeout and repeat.
+
+            msTimeout -= spinTimeout;
+            continue;
+        }
+
+        if( res > 0 )
+        {
+            for( SocketPoolState::const_iterator it = m_pool->begin(); it != m_pool->end(); ++it )
+            {
+                if( it->revents != 0 )
+                {
+                    socketActions->push_back( SocketActions::value_type( sh( it->fd ), 
+                        getActionMask( it->events, it->revents ) ) );
+                }
+            }
+        }
+
+        break;
+    }
+
+    return !socketActions->empty(); // true if activity has been detected.
+}
+#else
 
 struct SocketPoolState
 {
@@ -905,7 +1109,6 @@ struct SocketPoolState
     std::vector< SocketHandle >     sockets;
     int                             epoll;
 };
-
 
 SocketPoolState::SocketPoolState()
     : epoll( 0 )
@@ -922,9 +1125,6 @@ SocketPoolState::~SocketPoolState()
 {
     dbgVerify( !close( epoll ) );
 }
-
-#if USE_PEVENTS
-#else
 SocketPool::SocketPool() 
     : m_pool( NULL )
 {
@@ -1006,7 +1206,6 @@ SocketPool::remove( SocketHandle socket )  // nofail
     m_pool->sockets.erase( it );  // nofail
     return true;
 }
-#endif
 
 void
 SocketPool::reserve( size_t size ) 
@@ -1019,6 +1218,7 @@ SocketPool::size() const
 { 
     return m_pool->sockets.size();
 }
+
 
 static inline SocketActionMask
 getActionMask( UInt32 events )
@@ -1121,6 +1321,7 @@ SocketPool::wait( UInt32 msTimeout, UInt32 msInterruptOnlyTimeout, SocketActions
 
     return eventCount != 0;  // true if socket activity or interrupt.
 }
+#endif
 #endif  // !_WIN32
 
 SocketPool::~SocketPool()
