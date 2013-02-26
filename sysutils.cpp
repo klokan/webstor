@@ -895,6 +895,12 @@ SocketPool::wait( UInt32 msTimeout, UInt32 msInterruptOnlyTimeout, SocketActions
 
 #else  // !_WIN32
 
+static inline 
+int s( SocketHandle socket ) 
+{
+    return socket;
+}
+
 #if USE_PEVENTS
 
 typedef int SOCKET;
@@ -904,12 +910,6 @@ SocketHandle sh( SOCKET socket )
 {
      CASSERT( sizeof( SOCKET ) == sizeof( SocketHandle ) );
      return ( socket );
-}
-
-static inline 
-int s( SocketHandle socket ) 
-{
-    return socket;
 }
 
 struct SocketPoolState : public std::vector< pollfd > {};
