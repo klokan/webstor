@@ -139,7 +139,8 @@ throwSystemError( unsigned code, const char *op )
     dbgAssert( op );
 
     char buf[ 1024 ];
-    throwSystemError( op, strerror_r( code, buf, sizeof( buf ) ) );
+    strerror_r( code, buf, sizeof( buf ) );
+    throwSystemError( op,  buf);
 }
 #endif  // !_WIN32
 
