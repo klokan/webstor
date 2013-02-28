@@ -372,7 +372,7 @@ setSocketBuffers( SocketHandle socket, UInt32 size );
 #ifdef _WIN32
 typedef void * TaskHandle;
 #else
-typedef unsigned long TaskHandle;
+typedef pthread_t TaskHandle;
 #endif
 
 struct TaskCtrlDeleter

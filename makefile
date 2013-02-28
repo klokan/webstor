@@ -33,7 +33,7 @@ DEFINES=
 # If you have custom installations of those, modify your include
 # paths correspondingly.
 
-INCLUDES=-I/usr/include/libxml2 
+INCLUDES=-I/usr/include/libxml2 -I/opt/local/include/
 
 # Library search paths.  Similar to include paths.
 
@@ -41,8 +41,8 @@ LIBRARIES=
 
 ### RULES ###
 
-CXXFLAGS+=$(DEFINES) $(INCLUDES) $(LIBRARIES) -Wno-enum-compare
-LOADLIBES+=-lcurl -lssl -lxml2
+CXXFLAGS+=$(DEFINES) $(INCLUDES) $(LIBRARIES)
+LOADLIBES+=-lcurl -lssl -lxml2 -lcrypto
 
 .PHONY: all
 all: wsdbg wsperf wscmd

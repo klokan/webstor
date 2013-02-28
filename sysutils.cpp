@@ -1386,6 +1386,7 @@ setTcpKeepAlive( SocketHandle socket, const TcpKeepAliveParams *params )
 void
 setTcpKeepAlive( SocketHandle socket, const TcpKeepAliveParams *params )
 {
+#ifdef  __gnu_linux__
     if( params )
     {
         int val = params->probeStartTime / 1000;  // secs
@@ -1401,6 +1402,7 @@ setTcpKeepAlive( SocketHandle socket, const TcpKeepAliveParams *params )
     int val = params ? 1 : 0; 
     int res = setsockopt( socket, SOL_SOCKET, SO_KEEPALIVE, &val, sizeof( val ) );
     dbgAssert( !res );  
+#endif
 }
 
 #endif  // !_WIN32
