@@ -29,6 +29,15 @@ int mbtiles_iterator_new(MBTilesIterator **self_ptr, const char *path) {
 }
 
 void mbtiles_iterator_free(MBTilesIterator *self) {
+  if (self->sqlConn != NULL) {
+    sqlite3_close(self->sqlConn);
+  }
+  if (self->sqlStmt != NULL) {
+    sqlite3_finalize(self->sqlStmt);
+  }
+  if (self != NULL) {
+    free(self);
+  }
 }
 
 int mbtiles_iterator_finished(const MBTilesIterator *self) {
@@ -59,8 +68,10 @@ int main(int argc, char **argv) {
       mbtiles_iterator_get(iter, &tile);
       printf("%i %i %i\n", tile.zoom_level, tile.column, tile.row);
     }
+    mbtiles_iterator_free(iter);
   } else {
     printf("error");
+    return 1;
   }
   return 0;
 }
