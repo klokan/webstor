@@ -10,7 +10,7 @@ struct MBTilesIterator {
   int sqlStmtResult;
 };
 
-int mbtiles_iterator_new(MBTilesIterator **self_ptr, const char *path) {
+int mbtiles_iterator_new(MBTilesIterator **self_ptr, MBTilesMetadata *metadata, const char *path) {
   *self_ptr = (MBTilesIterator*) malloc(sizeof(MBTilesIterator));
   (*self_ptr)->sqlConn = 0;
   (*self_ptr)->sqlStmt = 0;
@@ -61,8 +61,9 @@ int mbtiles_iterator_get(MBTilesIterator *self, MBTile *tile) {
 #if HAVE_MAIN
 int main(int argc, char **argv) {
   MBTilesIterator *iter;
+  MBTilesMetadata metadata;
   MBTile tile;
-  int res = mbtiles_iterator_new(&iter, argv[1]);
+  int res = mbtiles_iterator_new(&iter, &metadata, argv[1]);
   if (res == 0) {
     while (!mbtiles_iterator_finished(iter)) {
       mbtiles_iterator_get(iter, &tile);

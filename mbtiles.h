@@ -28,7 +28,7 @@ extern "C" {
  *   Allocate new iterator, initialize it for reading `path` and set `self_ptr` to point to it.
  *   Return zero on success, negative value on failure.
  */
-int mbtiles_iterator_new(MBTilesIterator **self_ptr, const char *path);
+int mbtiles_iterator_new(MBTilesIterator **self_ptr, MBTilesMetadata *metadata, const char *path);
 
 /*
  *  Clear all resources and deallocate the iterator.
