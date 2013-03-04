@@ -26,7 +26,7 @@ void PosixDirectoryReader::listFiles( const std::string &dir, std::vector< std::
         struct dirent *directory_entry;
         if (dir != NULL)
         {
-            while ( directory_entry = readdir( dir )  )
+            while ( ( directory_entry = readdir( dir ) )  )
             {
                 bool rel = (strcmp ( directory.c_str() , "." ) == 0);
                 if ( directory_entry->d_type == DT_REG ) {

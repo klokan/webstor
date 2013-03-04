@@ -29,11 +29,13 @@
 #include <curl/curl.h>
 #include <libxml/parser.h>
 #include <openssl/err.h>
+#include <openssl/sha.h>
 #include <openssl/hmac.h>
 #include <openssl/ssl.h>
 
 #include <algorithm>
 #include <memory>
+
 
 namespace webstor
 {
