@@ -38,7 +38,14 @@
 
 #ifdef _WIN32 
 #define snprintf sprintf_s 
-#endif 
+#endif
+
+#define ENABLE_MBTILES_UPLOAD 1
+
+#if ENABLE_MBTILES_UPLOAD
+#include <sstream>
+#include "mbtiles.h"
+#endif
 
 using namespace webstor;
 using namespace webstor::internal;
@@ -1003,6 +1010,30 @@ uploadFilesInDirectory( WsConfig config, const Options &options, Statistics *sta
     }
 }
 
+#if ENABLE_MBTILES_UPLOAD
+static void
+uploadMBTiles( WsConfig config, const Options &options, Statistics *stat ) {
+    MBTilesIterator *iter;
+    MBTilesMetadata metadata;
+    MBTile tile;
+    int res = mbtiles_iterator_new(&iter, &metadata, options.filename.c_str());
+    if (res != 0) {
+        std::cerr << "File " << options.filename << " can't be opened as MBTiles database." << std::endl;
+	return;
+    }
+    while (!mbtiles_iterator_finished(iter)) {
+         mbtiles_iterator_get(iter, &tile);
+         std::stringstream ss;
+         int zoom = tile.zoom_level;
+         int col = tile.column;
+	 int row = ( 2 << ( zoom - 1) ) - tile.row;
+         ss << '/' << zoom << '/' << col << '/' << row << "." << metadata.format;
+         std::cout << ss.str() << std::endl;
+	 //TODO: upload the tiles
+    }
+}
+#endif
+
 //////////////////////////////////////////////////////////////////////////////
 // Execute actions.
 
@@ -1135,6 +1166,14 @@ execute( const Options &options, Statistics *stat )
         conn.abortAllMultipartUploads( options.bucketName.c_str(), options.prefix.c_str() );
         return;
     }
+    
+#if ENABLE_MBTILES_UPLOAD
+    if( !strcmp( options.action.c_str(), "uploadMBTiles" ) )
+    {
+         uploadMBTiles( config, options, stat );
+	 return;
+    }
+#endif
 
     // Unknown action.
 
