@@ -44,7 +44,6 @@ int mbtiles_iterator_new(MBTilesIterator **self_ptr, MBTilesMetadata *metadata, 
     int name_size = sqlite3_column_bytes(sqlStmt, 0);
     const char *value = (const char *) sqlite3_column_text(sqlStmt, 1);
     int value_size = sqlite3_column_bytes(sqlStmt, 1);
-    char *member_ptr = NULL;
     if (strcmp("name", name) == 0) {
        metadata->name = make_copy(value);
     } else if (strcmp("type", name) == 0) {
