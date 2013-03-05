@@ -41,7 +41,7 @@ LIBRARIES=
 
 ### RULES ###
 
-CXXFLAGS+=$(DEFINES) $(INCLUDES) $(LIBRARIES)
+CXXFLAGS+=$(DEFINES) $(INCLUDES) $(LIBRARIES) -Wswitch -Wparentheses
 LOADLIBES+=-lcurl -lssl -lxml2 -lcrypto
 
 .PHONY: all

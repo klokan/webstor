@@ -1386,8 +1386,8 @@ WsRequest::handleXmlPayload_( const void *chunkData, size_t count, size_t member
     {
         if( !m_ctx && 
             ( m_responseDetails.status == WS_RESPONSE_STATUS_SUCCESS ||
-            m_responseDetails.status == WS_RESPONSE_STATUS_HTTP_RESOURSE_NOT_FOUND ) ||
-            m_responseDetails.status == WS_RESPONSE_STATUS_HTTP_OR_WS_FAILURE ) 
+            m_responseDetails.status == WS_RESPONSE_STATUS_HTTP_RESOURSE_NOT_FOUND ||
+            m_responseDetails.status == WS_RESPONSE_STATUS_HTTP_OR_WS_FAILURE ) ) 
         {
             // Create the SAX parser.
 
@@ -1535,6 +1535,8 @@ WsRequest::setXmlValueImpl( const xmlChar *value, int len )
         case WS_RESPONSE_NODE_HOST_ID:
             m_responseDetails.hostId.assign( p, len );
             break;
+	default:
+	    break;
         }
 
         if( m_responseDetails.status == WS_RESPONSE_STATUS_HTTP_RESOURSE_NOT_FOUND ||
@@ -1790,6 +1792,8 @@ WsListBucketsRequest::onSetXmlValue( const char *value, int len )
     case WS_RESPONSE_NODE_CREATION_DATE:
         m_current.creationDate.assign( value, len );
         break;
+    default:
+        break;
     }
 
     return true;
@@ -1934,6 +1938,8 @@ WsListObjectsRequest::onSetXmlValue( const char *value, int len )
     case WS_RESPONSE_NODE_NEXT_MARKER:
         m_nextMarker.assign( value, len );
         break;
+    default:
+        break;
     }
 
     return true;
@@ -1950,10 +1956,10 @@ WsListObjectsRequest::isObjectNode()
     }
     else
     {
-        return m_stackTop == 3 && m_stack[ m_stackTop - 1 ] == WS_RESPONSE_NODE_CONTENTS ||
-            m_stackTop == 4 && 
+        return ( m_stackTop == 3 && m_stack[ m_stackTop - 1 ] == WS_RESPONSE_NODE_CONTENTS ) ||
+            ( m_stackTop == 4 && 
             m_stack[ m_stackTop - 1 ] == WS_RESPONSE_NODE_PREFIX && 
-            m_stack[ m_stackTop - 2 ] == WS_RESPONSE_NODE_COMMON_PREFIXES;
+            m_stack[ m_stackTop - 2 ] == WS_RESPONSE_NODE_COMMON_PREFIXES );
     }
 }
 
@@ -2158,6 +2164,8 @@ WsListMultipartUploadsRequest::onSetXmlValue( const char *value, int len )
             m_current.isDir = true;
         }
         break;
+    default:
+        break;
     }
 
     return true;
@@ -2342,7 +2350,7 @@ WsConnection::isAsyncCompleted()
 int       
 WsConnection::waitAny( WsConnection **cons, size_t count, size_t startFrom, long timeout )
 {
-    CASSERT( c_maxWaitAny == EventSync::c_maxEventCount );
+    CASSERT( static_cast< size_t >( c_maxWaitAny ) == EventSync::c_maxEventCount );
     dbgAssert( implies( count, cons ) );
 
     if( count > EventSync::c_maxEventCount )
