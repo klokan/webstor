@@ -1026,10 +1026,10 @@ uploadMBTiles( WsConfig config, const Options &options, Statistics *stat ) {
          std::stringstream ss;
          int zoom = tile.zoom_level;
          int col = tile.column;
-	 int row = ( 2 << ( zoom - 1) ) - tile.row;
+         int row = ( 2 << ( zoom - 1) ) - tile.row;
          ss << '/' << zoom << '/' << col << '/' << row << "." << metadata.format;
          std::cout << ss.str() << std::endl;
-	 //TODO: upload the tiles
+         //TODO: upload the tiles
     }
 }
 #endif
