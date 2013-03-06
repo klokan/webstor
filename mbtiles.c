@@ -97,7 +97,7 @@ int mbtiles_iterator_get(MBTilesIterator *self, MBTile *tile) {
   self->sqlStmtResult = sqlite3_step(self->sqlStmt);
 }
 
-#define HAVE_MAIN 1
+#define HAVE_MAIN 0
 
 #if HAVE_MAIN
 int main(int argc, char **argv) {
