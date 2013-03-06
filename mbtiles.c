@@ -92,8 +92,11 @@ int mbtiles_iterator_get(MBTilesIterator *self, MBTile *tile) {
   tile->zoom_level = sqlite3_column_int(self->sqlStmt, 0);
   tile->column = sqlite3_column_int(self->sqlStmt, 1);
   tile->row = sqlite3_column_int(self->sqlStmt, 2);
-  tile->data = (const char *) sqlite3_column_blob(self->sqlStmt, 3);
+  const char *data = (const char *) sqlite3_column_blob(self->sqlStmt, 3);
   tile->data_size = sqlite3_column_bytes(self->sqlStmt, 3);
+  char *tmp = malloc(tile->data_size);
+  memcpy(tmp, data, tile->data_size);
+  tile->data = tmp;
   self->sqlStmtResult = sqlite3_step(self->sqlStmt);
 }
 
@@ -110,6 +113,7 @@ int main(int argc, char **argv) {
     while (!mbtiles_iterator_finished(iter)) {
       mbtiles_iterator_get(iter, &tile);
       printf("%i %i %i\n", tile.zoom_level, tile.column, tile.row);
+      free((void*) tile.data);
     }
     mbtiles_iterator_free(iter);
   } else {
