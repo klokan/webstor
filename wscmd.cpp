@@ -1013,23 +1013,55 @@ uploadFilesInDirectory( WsConfig config, const Options &options, Statistics *sta
 #if ENABLE_MBTILES_UPLOAD
 static void
 uploadMBTiles( WsConfig config, const Options &options, Statistics *stat ) {
+    AsyncMan asyncMan(options.threads);
+    const int connections_count = options.requests;
+    std::vector<WsConnection *> connections(connections_count);
+    std::vector<Upload> uploads(connections_count);
+    for (int i = 0; i!= connections_count; i++) {
+        connections[i] = new WsConnection( config );
+    }
     MBTilesIterator *iter;
     MBTilesMetadata metadata;
     MBTile tile;
     int res = mbtiles_iterator_new(&iter, &metadata, options.filename.c_str());
     if (res != 0) {
         std::cerr << "File " << options.filename << " can't be opened as MBTiles database." << std::endl;
-	return;
+        return;
     }
+    int iteration = 0;
     while (!mbtiles_iterator_finished(iter)) {
-         mbtiles_iterator_get(iter, &tile);
-         std::stringstream ss;
-         int zoom = tile.zoom_level;
-         int col = tile.column;
-         int row = ( 2 << ( zoom - 1) ) - tile.row;
-         ss << '/' << zoom << '/' << col << '/' << row << "." << metadata.format;
-         std::cout << ss.str() << std::endl;
-         //TODO: upload the tiles
+        mbtiles_iterator_get(iter, &tile);
+        std::stringstream ss;
+        int zoom = tile.zoom_level;
+        int col = tile.column;
+        int row = ( 2 << ( zoom - 1) ) - tile.row;
+        ss << zoom << '/' << col << '/' << row << "." << metadata.format;
+        std::cout << ss.str() << std::endl;
+        Upload upload;
+        upload.filepath = new std::string(ss.str());
+        upload.buffer = new char[tile.data_size];
+        memcpy(upload.buffer, tile.data, tile.data_size);
+	free((void*) tile.data);
+        int index = WsConnection::waitAny( &connections[0], connections_count, (iteration % connections_count));
+        dbgAssert( index >= 0 && index < connections_count );
+        if (connections[index]->isAsyncPending()) {
+            WsPutResponse response;
+            connections[index]->completePut(&response);
+            Upload cleanMe = uploads[index];
+            if (cleanMe.filepath != NULL) {
+                delete cleanMe.filepath;
+                cleanMe.filepath = NULL;
+            }
+            if (cleanMe.buffer != NULL) {
+                delete[] cleanMe.buffer;
+                cleanMe.buffer = NULL;
+            }
+        }
+        connections[index]->pendPut(&asyncMan, options.bucketName.c_str(), upload.filepath->c_str(),
+            static_cast< const void * >( upload.buffer ), tile.data_size,
+            options.makePublic, false );
+        uploads[index] = upload;
+        iteration++;
     }
 }
 #endif
