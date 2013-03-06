@@ -93,6 +93,9 @@ usage()
         "       listAllObjects                                                          \n"
         "       listAllMultipartUploads                                                 \n"
         "       abortAllMultipartUploads                                                \n"
+#if ENABLE_MBTILES_UPLOAD
+        "       uploadMBTiles                                                           \n"
+#endif
         "                                                                               \n"
         "    action-specific parameters, some of them mandatory depending on action:    \n"
         "                                                                               \n"
@@ -138,6 +141,11 @@ usage()
         " * upload a file:                                                              \n"
         "   wscmd -i WS_ACCESS_KEY -s WS_SECRET_KEY -a put -n mybucket                  \n"
         "   -f image.jpg -p folder/image.jpg -v                                         \n"
+#if ENABLE_MBTILES_UPLOAD
+        "                                                                               \n"
+        " * upload tiles from MBTile file:                                              \n"
+        "   wscmd -i WS_ACCESS_KEY -s WS_SECRET_KEY -a uploadMBTiles -f tiles.mbtiles   \n"
+#endif
         "                                                                               \n"
         " * upload a large file using multipart upload:                                 \n"
         "   wscmd -i WS_ACCESS_KEY -s WS_SECRET_KEY -a put -n mybucket                  \n"
