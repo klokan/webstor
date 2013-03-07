@@ -1784,11 +1784,8 @@ void
 WsMultipleDelRequest::onPrepare( CURL *curl )
 {
     WsRequest::onPrepare( curl );
-    struct curl_slist *headers=NULL;
-    headers = curl_slist_append(headers, "Content-Type: text/xml");  // http://curl.haxx.se/libcurl/c/curl_slist_append.html
     curl_easy_setopt_checked( curl, CURLOPT_INFILESIZE, m_totalSize );
     curl_easy_setopt_checked( curl, CURLOPT_UPLOAD, 1 );
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers); 
 }
 
 //////////////////////////////////////////////////////////////////////////////
