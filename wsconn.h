@@ -740,7 +740,7 @@ private:
 
     void            init( WsRequest *request, const char *bucketName, const char *key, 
                         const char *keySuffix = NULL, const char *contentType = NULL, 
-                        bool makePublic = false, bool useSrvEncrypt = false );
+                        bool makePublic = false, bool useSrvEncrypt = false, const char *contentMd5 = 0 );
 
     void            put( WsRequest *request, const char *bucketName, const char *key, 
                         const char *uploadId, int partNumber, 

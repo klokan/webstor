@@ -2594,7 +2594,7 @@ WsConnection::prepare( WsRequest *request, const char *bucketName, const char *k
 void
 WsConnection::init( WsRequest *request, const char *bucketName, const char *key, 
                       const char *keySuffix, const char *contentType, 
-                      bool makePublic,  bool useSrvEncrypt )
+                      bool makePublic,  bool useSrvEncrypt, const char *contentMd5 )
 {
     dbgAssert( bucketName );
 
@@ -2602,7 +2602,7 @@ WsConnection::init( WsRequest *request, const char *bucketName, const char *key,
     std::string escapedKey;
     composeUrl( m_baseUrl, bucketName, key, keySuffix, &url, &escapedKey );
 
-    prepare( request, bucketName, key ? escapedKey.c_str() : NULL, contentType, makePublic, useSrvEncrypt );
+    prepare( request, bucketName, key ? escapedKey.c_str() : NULL, contentType, makePublic, useSrvEncrypt, contentMd5 );
 
     request->setUrl( url.c_str() );
 }
@@ -3286,7 +3286,13 @@ WsConnection::delAll( const char *bucketName, const char *prefix, unsigned int m
         size_t resultSize;
         char md5Hash[MD5_HEX_SIZE];
         char* requestBody = createMultipleDelXml(objects, &resultSize, md5Hash);
-	
+        //WsInitiateMultipartUploadRequest request( key );
+        WsMultipleDelRequest request( bucketName, md5Hash, static_cast< const void * > ( requestBody ), resultSize );
+        init( &request, bucketName, NULL, "?delete" /* keySuffix */, 
+            0, false, false, md5Hash );
+
+        WsResponseDetails &responseDetails = request.execute();  
+        handleErrors( responseDetails );
 #else 
         for( int i = 0; i < objects.size(); ++i )
         {
