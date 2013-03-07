@@ -21,6 +21,8 @@
 // WebStor connection.
 //////////////////////////////////////////////////////////////////////////////
 
+#define ENABLE_MULTIPLE_DELETE 1
+
 #include "wsconn.h"
 
 #include "sysutils.h"
@@ -34,6 +36,15 @@
 
 #include <algorithm>
 #include <memory>
+
+#include <iostream>
+
+#if ENABLE_MULTIPLE_DELETE
+#include <sstream>
+#include <libxml/xmlwriter.h>
+#include <mhash.h>
+#define MD5_HEX_SIZE 32
+#endif
 
 namespace webstor
 {
@@ -1722,6 +1733,65 @@ WsDelRequest::onPrepare( CURL *curl )
 }
 
 //////////////////////////////////////////////////////////////////////////////
+// Response handling for 'MultipleDel' operation.
+class WsMultipleDelRequest : public WsRequest
+{
+public:
+                    WsMultipleDelRequest( const char *name, WsPutRequestUploader *uploader,
+                        size_t totalSize, const char *md5Hash );
+                    WsMultipleDelRequest( const char *name, const char *md5Hash, const void *data = NULL, size_t size = 0 );
+
+    void            setUpload( const void *data, size_t size );
+
+private:
+    virtual size_t  onUploadBinary( void *chunkBuf, size_t chunkSize );
+    virtual void    onPrepare( CURL *curl );
+    virtual const char *onHttpVerb() { return "POST"; }
+
+    WsPutRequestBufferUploader m_builtinUploader;
+    WsPutRequestUploader *m_uploader;
+    size_t          m_totalSize;
+    char*           m_md5Hash;
+};
+
+
+WsMultipleDelRequest::WsMultipleDelRequest( const char *name, WsPutRequestUploader *uploader,
+                            size_t totalSize, const char * md5Hash)
+    : WsRequest( name )
+    , m_builtinUploader( NULL, 0 )
+    , m_uploader( uploader )
+    , m_totalSize( totalSize )
+    , m_md5Hash ( m_md5Hash )
+{
+}
+
+WsMultipleDelRequest::WsMultipleDelRequest( const char *name, const char *md5Hash, const void *data, size_t size )
+    : WsRequest( name )
+    , m_md5Hash ( m_md5Hash )
+    , m_builtinUploader( data, size )
+    , m_uploader( &m_builtinUploader )
+    , m_totalSize( size )
+{
+}
+
+size_t
+WsMultipleDelRequest::onUploadBinary( void *chunkBuf, size_t chunkSize )
+{
+     return m_uploader->onUpload( chunkBuf, chunkSize );
+}
+
+void
+WsMultipleDelRequest::onPrepare( CURL *curl )
+{
+    WsRequest::onPrepare( curl );
+    struct curl_slist *headers=NULL;
+    headers = curl_slist_append(headers, "Content-Type: text/xml");  // http://curl.haxx.se/libcurl/c/curl_slist_append.html
+    curl_easy_setopt_checked( curl, CURLOPT_INFILESIZE, m_totalSize );
+    curl_easy_setopt_checked( curl, CURLOPT_UPLOAD, 1 );
+    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers); 
+}
+
+//////////////////////////////////////////////////////////////////////////////
 // Response handling for 'listObjects' operation.
 
 class WsListBucketsRequest : public WsRequest
@@ -3152,6 +3222,48 @@ WsConnection::completeDel( WsDelResponse *response )
     LOG_TRACE( "leave completeDel: conn=0x%llx", ( UInt64 )this );
 }
 
+#if ENABLE_MULTIPLE_DELETE
+char *createMultipleDelXml(std::vector< WsObject > &objects, size_t *result_size, char *result_hash) {
+    xmlBufferPtr buf = xmlBufferCreate();
+    if (buf == NULL) {
+        std::cerr << "testXmlwriterMemory: Error creating the xml buffer" << std::endl;
+        return 0;
+    }
+    xmlTextWriterPtr writer = xmlNewTextWriterMemory(buf, 0);
+    if (writer == NULL) {
+        std::cerr << "testXmlwriterMemory: Error creating the xml writer\n" << std::endl;
+        return 0;
+    }
+    int rc = xmlTextWriterStartDocument(writer, NULL, "UTF-8", NULL);
+    if (rc < 0) {
+        std::cerr << "testXmlwriterFilename: Error at xmlTextWriterStartElement\n" << std::endl;
+        return 0;
+    }
+    xmlTextWriterStartElement(writer, BAD_CAST "Delete");
+    xmlTextWriterWriteElement(writer, BAD_CAST "Quiet", BAD_CAST "true");
+    xmlTextWriterStartElement(writer, BAD_CAST "Object");
+    for( int i = 0; i < objects.size(); ++i )
+    {
+        xmlTextWriterWriteElement(writer, BAD_CAST "Key", BAD_CAST objects[i].key.c_str());
+    }
+    xmlTextWriterEndElement(writer);
+    xmlTextWriterEndElement(writer);
+    xmlTextWriterEndDocument(writer);
+    std::string str((const char*) buf->content, (size_t) buf->use);
+    std::cout << str << std::endl;
+    MHASH td = mhash_init(MHASH_MD5);
+    mhash(td, buf->content, buf->use);
+    unsigned char *hash = (unsigned char *) mhash_end(td);
+    std::stringstream shash;
+    for (int i = 0; i < mhash_get_block_size(MHASH_MD5); i++) {
+        shash << std::hex << static_cast < int > ( hash[i] );
+    }
+    memcpy(result_hash, shash.str().c_str(), 32);
+    *result_size = buf->use;
+    return reinterpret_cast< char * >( buf->content ); // FIXME
+}
+#endif
+
 void
 WsConnection::delAll( const char *bucketName, const char *prefix, unsigned int maxKeysInBatch )
 {
@@ -3168,10 +3280,20 @@ WsConnection::delAll( const char *bucketName, const char *prefix, unsigned int m
         listObjects( bucketName, prefix, response.nextMarker.c_str(), 
             NULL /* delimiter*/, maxKeysInBatch, &objects, &response );
 
+
+#if ENABLE_MULTIPLE_DELETE
+        std::cout << "multiple delete called" << std::endl;
+        size_t resultSize;
+        char md5Hash[MD5_HEX_SIZE];
+        char* requestBody = createMultipleDelXml(objects, &resultSize, md5Hash);
+	
+#else 
         for( int i = 0; i < objects.size(); ++i )
         {
             del( bucketName, objects[i].key.c_str() );
+
         }
+#endif
         objects.clear();
     }
     while( response.isTruncated );
