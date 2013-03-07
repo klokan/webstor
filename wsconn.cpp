@@ -2490,7 +2490,7 @@ writeNoop( const void *chunkData, size_t count, size_t elementSize, void *ctx ) 
 
 void
 WsConnection::prepare( WsRequest *request, const char *bucketName, const char *key,
-        const char *contentType, bool makePublic, bool useSrvEncrypt )
+        const char *contentType, bool makePublic, bool useSrvEncrypt, const char *contentMd5 )
 {
     dbgAssert( !m_asyncRequest ); // some async operation is in progress, need to complete/cancel it first 
                                   // before starting a new one.
@@ -2580,7 +2580,7 @@ WsConnection::prepare( WsRequest *request, const char *bucketName, const char *k
     // to curl.
 
     setRequestHeaders( m_accKey, m_secKey,
-        0 /* contentMd5 */, contentType, makePublic, useSrvEncrypt,
+        contentMd5, contentType, makePublic, useSrvEncrypt,
         request->httpVerb(), bucketName, key, m_storType,
         &request->headers );
 
