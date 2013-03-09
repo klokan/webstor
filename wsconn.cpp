@@ -42,8 +42,8 @@
 #if ENABLE_MULTIPLE_DELETE
 #include <sstream>
 #include <libxml/xmlwriter.h>
-#include <mhash.h>
-#define MD5_HEX_SIZE 32
+#include <openssl/md5.h>
+#define MD5_HASH_SIZE 16
 #endif
 
 namespace webstor
@@ -3248,14 +3248,7 @@ char *createMultipleDelXml(std::vector< WsObject > &objects, size_t *result_size
     xmlTextWriterEndDocument(writer);
     std::string str((const char*) buf->content, (size_t) buf->use);
     std::cout << str << std::endl;
-    MHASH td = mhash_init(MHASH_MD5);
-    mhash(td, buf->content, buf->use);
-    unsigned char *hash = (unsigned char *) mhash_end(td);
-    std::stringstream shash;
-    for (int i = 0; i < mhash_get_block_size(MHASH_MD5); i++) {
-        shash << std::hex << static_cast < int > ( hash[i] );
-    }
-    memcpy(result_hash, shash.str().c_str(), 32);
+    unsigned char *md5 = MD5(buf->content, buf->use, (unsigned char *) result_hash);
     *result_size = buf->use;
     return reinterpret_cast< char * >( buf->content ); // FIXME
 }
@@ -3281,16 +3274,18 @@ WsConnection::delAll( const char *bucketName, const char *prefix, unsigned int m
 #if ENABLE_MULTIPLE_DELETE
         std::cout << "multiple delete called" << std::endl;
         size_t resultSize;
-        char md5Hash[MD5_HEX_SIZE];
+        char md5Hash[MD5_HASH_SIZE];
         char* requestBody = createMultipleDelXml(objects, &resultSize, md5Hash);
+        std::string md5HashBase64;
+        append64Encoded(&md5HashBase64, md5Hash, MD5_HASH_SIZE);
         //WsInitiateMultipartUploadRequest request( key );
-        WsMultipleDelRequest request( bucketName, md5Hash, static_cast< const void * > ( requestBody ), resultSize );
-        init( &request, bucketName, NULL, "?delete" /* keySuffix */, 
-            0, false, false, md5Hash );
+        WsMultipleDelRequest request( bucketName, md5HashBase64.c_str(), static_cast< const void * > ( requestBody ), resultSize );
+        init( &request, bucketName, NULL, "?delete" /* keySuffix */,
+            0, false, false, md5HashBase64.c_str() );
 
-        WsResponseDetails &responseDetails = request.execute();  
+        WsResponseDetails &responseDetails = request.execute();
         handleErrors( responseDetails );
-#else 
+#else
         for( int i = 0; i < objects.size(); ++i )
         {
             del( bucketName, objects[i].key.c_str() );

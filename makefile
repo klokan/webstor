@@ -42,7 +42,7 @@ LIBRARIES=
 ### RULES ###
 
 CXXFLAGS+=$(DEFINES) $(INCLUDES) $(LIBRARIES) -Wswitch -Wparentheses
-LOADLIBES+=-lcurl -lssl -lxml2 -lcrypto -lsqlite3 -lmhash
+LOADLIBES+=-lcurl -lssl -lxml2 -lcrypto -lsqlite3
 
 .PHONY: all
 all: wsdbg wsperf wscmd
