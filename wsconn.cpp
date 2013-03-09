@@ -1737,9 +1737,7 @@ WsDelRequest::onPrepare( CURL *curl )
 class WsMultipleDelRequest : public WsRequest
 {
 public:
-                    WsMultipleDelRequest( const char *name, WsPutRequestUploader *uploader,
-                        size_t totalSize, const char *md5Hash );
-                    WsMultipleDelRequest( const char *name, const char *md5Hash, const void *data = NULL, size_t size = 0 );
+                    WsMultipleDelRequest( const char *name, const void *data = NULL, size_t size = 0 );
 
     void            setUpload( const void *data, size_t size );
 
@@ -1751,23 +1749,10 @@ private:
     WsPutRequestBufferUploader m_builtinUploader;
     WsPutRequestUploader *m_uploader;
     size_t          m_totalSize;
-    char*           m_md5Hash;
 };
 
-
-WsMultipleDelRequest::WsMultipleDelRequest( const char *name, WsPutRequestUploader *uploader,
-                            size_t totalSize, const char * md5Hash)
+WsMultipleDelRequest::WsMultipleDelRequest( const char *name, const void *data, size_t size )
     : WsRequest( name )
-    , m_builtinUploader( NULL, 0 )
-    , m_uploader( uploader )
-    , m_totalSize( totalSize )
-    , m_md5Hash ( m_md5Hash )
-{
-}
-
-WsMultipleDelRequest::WsMultipleDelRequest( const char *name, const char *md5Hash, const void *data, size_t size )
-    : WsRequest( name )
-    , m_md5Hash ( m_md5Hash )
     , m_builtinUploader( data, size )
     , m_uploader( &m_builtinUploader )
     , m_totalSize( size )
@@ -3278,7 +3263,7 @@ WsConnection::delAll( const char *bucketName, const char *prefix, unsigned int m
         char* requestBody = createMultipleDelXml(objects, &resultSize, md5Hash);
         std::string md5HashBase64;
         append64Encoded(&md5HashBase64, md5Hash, MD5_HASH_SIZE);
-        WsMultipleDelRequest request( bucketName, md5HashBase64.c_str(), static_cast< const void * > ( requestBody ), resultSize );
+        WsMultipleDelRequest request( bucketName, static_cast< const void * > ( requestBody ), resultSize );
         init( &request, bucketName, NULL, "?delete" /* keySuffix */,
             0, false, false, md5HashBase64.c_str() );
 
