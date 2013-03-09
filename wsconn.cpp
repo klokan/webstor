@@ -3278,7 +3278,6 @@ WsConnection::delAll( const char *bucketName, const char *prefix, unsigned int m
         char* requestBody = createMultipleDelXml(objects, &resultSize, md5Hash);
         std::string md5HashBase64;
         append64Encoded(&md5HashBase64, md5Hash, MD5_HASH_SIZE);
-        //WsInitiateMultipartUploadRequest request( key );
         WsMultipleDelRequest request( bucketName, md5HashBase64.c_str(), static_cast< const void * > ( requestBody ), resultSize );
         init( &request, bucketName, NULL, "?delete" /* keySuffix */,
             0, false, false, md5HashBase64.c_str() );
