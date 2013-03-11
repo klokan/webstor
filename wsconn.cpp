@@ -43,7 +43,6 @@
 #include <sstream>
 #include <libxml/xmlwriter.h>
 #include <openssl/md5.h>
-#define MD5_HASH_SIZE 16
 #endif
 
 namespace webstor
@@ -3205,7 +3204,7 @@ WsConnection::completeDel( WsDelResponse *response )
 }
 
 #if ENABLE_MULTIPLE_DELETE
-char *createMultipleDelXml(std::vector< WsObject > &objects, size_t *result_size, char *result_hash) {
+char *createMultipleDelXml(std::vector< WsObject > &objects, size_t *result_size, unsigned char *md5Hash) {
     xmlBufferPtr buf = xmlBufferCreate();
     if (buf == NULL) {
         std::cerr << "testXmlwriterMemory: Error creating the xml buffer" << std::endl;
@@ -3233,7 +3232,7 @@ char *createMultipleDelXml(std::vector< WsObject > &objects, size_t *result_size
     xmlTextWriterEndDocument(writer);
     std::string str((const char*) buf->content, (size_t) buf->use);
     std::cout << str << std::endl;
-    unsigned char *md5 = MD5(buf->content, buf->use, (unsigned char *) result_hash);
+    MD5(buf->content, buf->use, md5Hash);
     *result_size = buf->use;
     return reinterpret_cast< char * >( buf->content ); // FIXME
 }
@@ -3259,10 +3258,10 @@ WsConnection::delAll( const char *bucketName, const char *prefix, unsigned int m
 #if ENABLE_MULTIPLE_DELETE
         std::cout << "multiple delete called" << std::endl;
         size_t resultSize;
-        char md5Hash[MD5_HASH_SIZE];
+        unsigned char md5Hash[MD5_DIGEST_LENGTH];
         char* requestBody = createMultipleDelXml(objects, &resultSize, md5Hash);
         std::string md5HashBase64;
-        append64Encoded(&md5HashBase64, md5Hash, MD5_HASH_SIZE);
+        append64Encoded(&md5HashBase64, md5Hash, MD5_DIGEST_LENGTH);
         WsMultipleDelRequest request( bucketName, static_cast< const void * > ( requestBody ), resultSize );
         init( &request, bucketName, NULL, "?delete" /* keySuffix */,
             0, false, false, md5HashBase64.c_str() );
