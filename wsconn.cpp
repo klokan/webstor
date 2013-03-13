@@ -1768,6 +1768,7 @@ void
 WsMultipleDelRequest::onPrepare( CURL *curl )
 {
     WsRequest::onPrepare( curl );
+    curl_easy_setopt_checked( m_curl, CURLOPT_CUSTOMREQUEST, httpVerb() );
     curl_easy_setopt_checked( curl, CURLOPT_INFILESIZE, m_totalSize );
     curl_easy_setopt_checked( curl, CURLOPT_UPLOAD, 1 );
 }
@@ -3222,16 +3223,14 @@ char *createMultipleDelXml(std::vector< WsObject > &objects, size_t *result_size
     }
     xmlTextWriterStartElement(writer, BAD_CAST "Delete");
     xmlTextWriterWriteElement(writer, BAD_CAST "Quiet", BAD_CAST "true");
-    xmlTextWriterStartElement(writer, BAD_CAST "Object");
     for( int i = 0; i < objects.size(); ++i )
     {
+        xmlTextWriterStartElement(writer, BAD_CAST "Object");
         xmlTextWriterWriteElement(writer, BAD_CAST "Key", BAD_CAST objects[i].key.c_str());
+        xmlTextWriterEndElement(writer);
     }
     xmlTextWriterEndElement(writer);
-    xmlTextWriterEndElement(writer);
     xmlTextWriterEndDocument(writer);
-    std::string str((const char*) buf->content, (size_t) buf->use);
-    std::cout << str << std::endl;
     MD5(buf->content, buf->use, md5Hash);
     *result_size = buf->use;
     return reinterpret_cast< char * >( buf->content ); // FIXME
@@ -3256,14 +3255,15 @@ WsConnection::delAll( const char *bucketName, const char *prefix, unsigned int m
 
 
 #if ENABLE_MULTIPLE_DELETE
-        std::cout << "multiple delete called" << std::endl;
         size_t resultSize;
         unsigned char md5Hash[MD5_DIGEST_LENGTH];
         char* requestBody = createMultipleDelXml(objects, &resultSize, md5Hash);
         std::string md5HashBase64;
         append64Encoded(&md5HashBase64, md5Hash, MD5_DIGEST_LENGTH);
         WsMultipleDelRequest request( bucketName, static_cast< const void * > ( requestBody ), resultSize );
-        init( &request, bucketName, NULL, "?delete" /* keySuffix */,
+        std::stringstream key;
+        key << bucketName << "?delete";
+        init( &request, key.str().c_str(), 0, 0,
             0, false, false, md5HashBase64.c_str() );
 
         WsResponseDetails &responseDetails = request.execute();
