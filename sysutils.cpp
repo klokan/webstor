@@ -22,6 +22,7 @@
 //////////////////////////////////////////////////////////////////////////////
 
 #include "sysutils.h"
+#include "pevents.h"
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
@@ -31,8 +32,10 @@
 #include <mstcpip.h>
 #else  // !_WIN32
 #include <errno.h> 
+#if !USE_PEVENTS
 #include <sys/eventfd.h> 
 #include <sys/epoll.h> 
+#endif
 #include <poll.h>
 #include <pthread.h>
 #include <unistd.h>
@@ -49,6 +52,24 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+
+#define WAIT_OBJECT_0 0
+
+#ifdef __MACH__
+#include <sys/time.h>
+
+#define CLOCK_MONOTONIC 1
+
+// clock_gettime is not implemented on OS X
+int clock_gettime(int /*clk_id*/, struct timespec* t) {
+    struct timeval now;
+    int rv = gettimeofday(&now, NULL);
+    if (rv) return rv;
+    t->tv_sec  = now.tv_sec;
+    t->tv_nsec = now.tv_usec * 1000;
+    return 0;
+}
+#endif
 
 namespace webstor
 {
@@ -118,7 +139,8 @@ throwSystemError( unsigned code, const char *op )
     dbgAssert( op );
 
     char buf[ 1024 ];
-    throwSystemError( op, strerror_r( code, buf, sizeof( buf ) ) );
+    strerror_r( code, buf, sizeof( buf ) );
+    throwSystemError( op,  buf);
 }
 #endif  // !_WIN32
 
@@ -321,6 +343,68 @@ EventSync::waitAny( EventSync **events, size_t count, UInt32 msTimeout )
 
 #else  // !_WIN32
 
+#if USE_PEVENTS
+EventSync::EventSync( bool initialState )
+{
+    // Create manual-reset event.
+
+    m_handle = neosmart::CreateEvent(true /* manualReset */, initialState ? true : false);
+
+    if( !m_handle )
+    {
+        throwSystemError( (unsigned int) 0, "CreateEvent" );
+    }
+}
+
+EventSync::~EventSync()
+{
+    neosmart::DestroyEvent( m_handle );
+}
+
+void
+EventSync::set()  // nofail
+{
+    dbgVerify( neosmart::SetEvent( m_handle ) );
+}
+
+void
+EventSync::reset()  // nofail
+{
+    dbgVerify( neosmart::ResetEvent( m_handle ) );
+}
+
+bool
+EventSync::wait( UInt32 msTimeout ) const  // nofail
+{
+    int res = WaitForEvent( m_handle, msTimeout );
+    dbgAssert( res == 0 || res == ETIMEDOUT );
+    return res == 0;
+}
+
+int     
+EventSync::waitAny( EventSync **events, size_t count, UInt32 msTimeout )  
+{
+    dbgAssert( implies( count, events ) );
+
+    if ( count > c_maxEventCount )
+    {
+        throw std::runtime_error( "Not supported." );
+    }
+
+    void *handles[ c_maxEventCount ] = {};
+    
+    for( size_t i = 0; i < count; ++i )
+    {
+        dbgAssert( events[ i ] );
+        handles[ i ] = events[ i ]->m_handle;
+    }
+
+    int res = neosmart::WaitForMultipleEvents( (neosmart::neosmart_event_t*) handles, count, false /* waitAll */, msTimeout );
+    dbgAssert( res >= 0 && res < 0 + count || res == ETIMEDOUT );
+
+    return res == ETIMEDOUT ? -1 : res - 0;
+}
+#else
 EventSync::EventSync( bool initialState )
 {
     m_handle = eventfd( initialState ? 1 : 0, EFD_CLOEXEC | EFD_NONBLOCK );
@@ -474,6 +558,7 @@ EventSync::waitAny( EventSync **events, size_t count, UInt32 msTimeout )
 
     return ::webstor::internal::waitAny( &fds[ 0 ], count, msTimeout );
 }
+#endif // USE_PEVENTS
 
 #endif  // !_WIN32
 
@@ -833,6 +918,206 @@ int s( SocketHandle socket )
     return socket;
 }
 
+#if USE_PEVENTS
+
+typedef int SOCKET;
+
+static inline 
+SocketHandle sh( SOCKET socket ) 
+{
+     CASSERT( sizeof( SOCKET ) == sizeof( SocketHandle ) );
+     return ( socket );
+}
+
+struct SocketPoolState : public std::vector< pollfd > {};
+
+SocketPool::SocketPool() 
+    : m_pool( new SocketPoolState() )
+{
+}
+
+void            
+SocketPool::reserve( size_t size ) 
+{ 
+    m_pool->reserve( size ); 
+} 
+
+size_t          
+SocketPool::size() const
+{ 
+    return m_pool->size(); 
+}
+
+static int 
+pollfdLess( const pollfd& v1, const pollfd& v2 )
+{
+    return v1.fd < v2.fd;
+}
+
+bool 
+SocketPool::add( SocketHandle socket, SocketActionMask actionMask )  // nofail
+{
+    //$ WARNING: this is nofail only if SocketPool::reserve was called
+    // to ensure capacity.
+
+    UInt32 events = 
+        ( actionMask & SA_POLL_IN ?  POLLIN : 0 ) |
+        ( actionMask & SA_POLL_OUT ? POLLOUT : 0 );
+
+    pollfd fd = 
+    { 
+        s( socket ), 
+        events, 
+        0 
+    };
+
+    SocketPoolState::iterator it = std::lower_bound( m_pool->begin(), m_pool->end(), fd, pollfdLess );
+
+    if( it == m_pool->end() || it->fd != fd.fd )
+    {
+        // Insert a new socket.
+
+        dbgAssert( m_pool->capacity() > m_pool->size() );
+        m_pool->insert( it, fd );  // nofail because we checked capacity above.
+        return true;
+    }
+
+    // Update event mask on the existing socket.
+
+    it->events = events;
+    return false;
+}
+
+bool
+SocketPool::remove( SocketHandle socket )  // nofail
+{
+    pollfd fd = 
+    { 
+        s( socket ), 
+        0, 
+        0 
+    };
+
+    SocketPoolState::iterator it = std::lower_bound( m_pool->begin(), m_pool->end(), fd, pollfdLess );
+
+    if( it == m_pool->end() || it->fd != fd.fd )
+    {
+        return false;
+    }
+
+    m_pool->erase( it );  // nofail
+    return true;
+}
+
+static inline SocketActionMask
+getActionMask( UInt32 events, UInt32 revents )
+{
+    SocketActionMask actionMask = 0;
+
+    if( events & POLLIN ) 
+    {
+        if( revents & ( POLLRDNORM | POLLIN | POLLERR | POLLHUP ) )
+        {
+            actionMask |= SA_POLL_IN;
+        }
+        if( revents & ( POLLRDBAND | POLLPRI | POLLNVAL ) )
+        {
+            actionMask |= SA_POLL_ERR;
+        }
+    }
+
+    if( events & POLLOUT ) 
+    {
+        if( revents & ( POLLWRNORM | POLLOUT ) )
+        {
+            actionMask |= SA_POLL_OUT;
+        }
+        if( revents & ( POLLERR | POLLHUP | POLLNVAL ) )
+        {
+            actionMask |= SA_POLL_ERR;
+        }
+    }
+
+    return actionMask;
+}
+
+bool
+SocketPool::wait( UInt32 msTimeout, UInt32 msInterruptOnlyTimeout, SocketActions *socketActions )   
+{
+    dbgAssert( socketActions );
+    socketActions->clear();
+
+    if( m_pool->size() == 0 )
+    {
+        // We don't have any sockets to check activity, so wait for 
+        // the interrupt event.
+
+#ifdef PERF
+        Stopwatch stopwatch( true );
+#endif
+
+        int res = neosmart::WaitForEvent( m_interrupt.m_handle, msInterruptOnlyTimeout );
+        dbgAssert( res == WAIT_OBJECT_0 || res == WAIT_TIMEOUT );
+
+#ifdef PERF
+        LOG_TRACE( "SocketPoolSync:wait for interrupt, actual=%llu, result=%d", 
+            stopwatch.elapsed(), res );
+#endif
+
+        m_interrupt.reset();
+        return res == WAIT_OBJECT_0;  // true if interrupt.
+    }
+
+    dbgAssert( msTimeout < INFINITE );
+    const UInt32 spinTimeout = 15;
+
+    while( msTimeout )
+    {
+        // Check the interrupt signal.
+
+        if( m_interrupt.wait( 0 ) )
+        {
+            m_interrupt.reset();
+            return true;  // true if interrupt.
+        }
+        int res = poll( &( ( *m_pool )[ 0 ] ), m_pool->size(), spinTimeout );
+
+        dbgAssert( res >= 0 );
+
+        if( res == 0 )
+        {
+            if ( msTimeout <= spinTimeout )
+            {
+                // Overall timeout has expired.
+
+                break;
+            }
+
+            // Reduce the overall timeout and repeat.
+
+            msTimeout -= spinTimeout;
+            continue;
+        }
+
+        if( res > 0 )
+        {
+            for( SocketPoolState::const_iterator it = m_pool->begin(); it != m_pool->end(); ++it )
+            {
+                if( it->revents != 0 )
+                {
+                    socketActions->push_back( SocketActions::value_type( sh( it->fd ), 
+                        getActionMask( it->events, it->revents ) ) );
+                }
+            }
+        }
+
+        break;
+    }
+
+    return !socketActions->empty(); // true if activity has been detected.
+}
+#else
+
 struct SocketPoolState
 {
                     SocketPoolState();
@@ -841,7 +1126,6 @@ struct SocketPoolState
     std::vector< SocketHandle >     sockets;
     int                             epoll;
 };
-
 
 SocketPoolState::SocketPoolState()
     : epoll( 0 )
@@ -858,7 +1142,6 @@ SocketPoolState::~SocketPoolState()
 {
     dbgVerify( !close( epoll ) );
 }
-
 SocketPool::SocketPool() 
     : m_pool( NULL )
 {
@@ -953,6 +1236,7 @@ SocketPool::size() const
     return m_pool->sockets.size();
 }
 
+
 static inline SocketActionMask
 getActionMask( UInt32 events )
 {
@@ -1040,7 +1324,8 @@ SocketPool::wait( UInt32 msTimeout, UInt32 msInterruptOnlyTimeout, SocketActions
     {
         const epoll_event &ev = events[ i ];
 
-        if( ev.data.fd == m_interrupt.m_handle )
+        //if( ev.data.fd == m_interrupt.m_handle )
+	if (true) // FIXME
         {
             m_interrupt.reset();
         }
@@ -1053,6 +1338,7 @@ SocketPool::wait( UInt32 msTimeout, UInt32 msInterruptOnlyTimeout, SocketActions
 
     return eventCount != 0;  // true if socket activity or interrupt.
 }
+#endif
 #endif  // !_WIN32
 
 SocketPool::~SocketPool()
@@ -1100,6 +1386,7 @@ setTcpKeepAlive( SocketHandle socket, const TcpKeepAliveParams *params )
 void
 setTcpKeepAlive( SocketHandle socket, const TcpKeepAliveParams *params )
 {
+#ifdef  __gnu_linux__
     if( params )
     {
         int val = params->probeStartTime / 1000;  // secs
@@ -1115,6 +1402,7 @@ setTcpKeepAlive( SocketHandle socket, const TcpKeepAliveParams *params )
     int val = params ? 1 : 0; 
     int res = setsockopt( socket, SOL_SOCKET, SO_KEEPALIVE, &val, sizeof( val ) );
     dbgAssert( !res );  
+#endif
 }
 
 #endif  // !_WIN32

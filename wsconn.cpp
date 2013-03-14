@@ -21,6 +21,8 @@
 // WebStor connection.
 //////////////////////////////////////////////////////////////////////////////
 
+#define ENABLE_MULTIPLE_DELETE 1
+
 #include "wsconn.h"
 
 #include "sysutils.h"
@@ -34,6 +36,14 @@
 
 #include <algorithm>
 #include <memory>
+
+#include <iostream>
+
+#if ENABLE_MULTIPLE_DELETE
+#include <sstream>
+#include <libxml/xmlwriter.h>
+#include <openssl/md5.h>
+#endif
 
 namespace webstor
 {
@@ -1386,8 +1396,8 @@ WsRequest::handleXmlPayload_( const void *chunkData, size_t count, size_t member
     {
         if( !m_ctx && 
             ( m_responseDetails.status == WS_RESPONSE_STATUS_SUCCESS ||
-            m_responseDetails.status == WS_RESPONSE_STATUS_HTTP_RESOURSE_NOT_FOUND ) ||
-            m_responseDetails.status == WS_RESPONSE_STATUS_HTTP_OR_WS_FAILURE ) 
+            m_responseDetails.status == WS_RESPONSE_STATUS_HTTP_RESOURSE_NOT_FOUND ||
+            m_responseDetails.status == WS_RESPONSE_STATUS_HTTP_OR_WS_FAILURE ) ) 
         {
             // Create the SAX parser.
 
@@ -1535,6 +1545,8 @@ WsRequest::setXmlValueImpl( const xmlChar *value, int len )
         case WS_RESPONSE_NODE_HOST_ID:
             m_responseDetails.hostId.assign( p, len );
             break;
+	default:
+	    break;
         }
 
         if( m_responseDetails.status == WS_RESPONSE_STATUS_HTTP_RESOURSE_NOT_FOUND ||
@@ -1720,6 +1732,48 @@ WsDelRequest::onPrepare( CURL *curl )
 }
 
 //////////////////////////////////////////////////////////////////////////////
+// Response handling for 'MultipleDel' operation.
+class WsMultipleDelRequest : public WsRequest
+{
+public:
+                    WsMultipleDelRequest( const char *name, const void *data = NULL, size_t size = 0 );
+
+    void            setUpload( const void *data, size_t size );
+
+private:
+    virtual size_t  onUploadBinary( void *chunkBuf, size_t chunkSize );
+    virtual void    onPrepare( CURL *curl );
+    virtual const char *onHttpVerb() { return "POST"; }
+
+    WsPutRequestBufferUploader m_builtinUploader;
+    WsPutRequestUploader *m_uploader;
+    size_t          m_totalSize;
+};
+
+WsMultipleDelRequest::WsMultipleDelRequest( const char *name, const void *data, size_t size )
+    : WsRequest( name )
+    , m_builtinUploader( data, size )
+    , m_uploader( &m_builtinUploader )
+    , m_totalSize( size )
+{
+}
+
+size_t
+WsMultipleDelRequest::onUploadBinary( void *chunkBuf, size_t chunkSize )
+{
+     return m_uploader->onUpload( chunkBuf, chunkSize );
+}
+
+void
+WsMultipleDelRequest::onPrepare( CURL *curl )
+{
+    WsRequest::onPrepare( curl );
+    curl_easy_setopt_checked( m_curl, CURLOPT_CUSTOMREQUEST, httpVerb() );
+    curl_easy_setopt_checked( curl, CURLOPT_INFILESIZE, m_totalSize );
+    curl_easy_setopt_checked( curl, CURLOPT_UPLOAD, 1 );
+}
+
+//////////////////////////////////////////////////////////////////////////////
 // Response handling for 'listObjects' operation.
 
 class WsListBucketsRequest : public WsRequest
@@ -1789,6 +1843,8 @@ WsListBucketsRequest::onSetXmlValue( const char *value, int len )
 
     case WS_RESPONSE_NODE_CREATION_DATE:
         m_current.creationDate.assign( value, len );
+        break;
+    default:
         break;
     }
 
@@ -1934,6 +1990,8 @@ WsListObjectsRequest::onSetXmlValue( const char *value, int len )
     case WS_RESPONSE_NODE_NEXT_MARKER:
         m_nextMarker.assign( value, len );
         break;
+    default:
+        break;
     }
 
     return true;
@@ -1950,10 +2008,10 @@ WsListObjectsRequest::isObjectNode()
     }
     else
     {
-        return m_stackTop == 3 && m_stack[ m_stackTop - 1 ] == WS_RESPONSE_NODE_CONTENTS ||
-            m_stackTop == 4 && 
+        return ( m_stackTop == 3 && m_stack[ m_stackTop - 1 ] == WS_RESPONSE_NODE_CONTENTS ) ||
+            ( m_stackTop == 4 && 
             m_stack[ m_stackTop - 1 ] == WS_RESPONSE_NODE_PREFIX && 
-            m_stack[ m_stackTop - 2 ] == WS_RESPONSE_NODE_COMMON_PREFIXES;
+            m_stack[ m_stackTop - 2 ] == WS_RESPONSE_NODE_COMMON_PREFIXES );
     }
 }
 
@@ -2158,6 +2216,8 @@ WsListMultipartUploadsRequest::onSetXmlValue( const char *value, int len )
             m_current.isDir = true;
         }
         break;
+    default:
+        break;
     }
 
     return true;
@@ -2342,7 +2402,7 @@ WsConnection::isAsyncCompleted()
 int       
 WsConnection::waitAny( WsConnection **cons, size_t count, size_t startFrom, long timeout )
 {
-    CASSERT( c_maxWaitAny == EventSync::c_maxEventCount );
+    CASSERT( static_cast< size_t >( c_maxWaitAny ) == EventSync::c_maxEventCount );
     dbgAssert( implies( count, cons ) );
 
     if( count > EventSync::c_maxEventCount )
@@ -2412,7 +2472,7 @@ writeNoop( const void *chunkData, size_t count, size_t elementSize, void *ctx ) 
 
 void
 WsConnection::prepare( WsRequest *request, const char *bucketName, const char *key,
-        const char *contentType, bool makePublic, bool useSrvEncrypt )
+        const char *contentType, bool makePublic, bool useSrvEncrypt, const char *contentMd5 )
 {
     dbgAssert( !m_asyncRequest ); // some async operation is in progress, need to complete/cancel it first 
                                   // before starting a new one.
@@ -2502,7 +2562,7 @@ WsConnection::prepare( WsRequest *request, const char *bucketName, const char *k
     // to curl.
 
     setRequestHeaders( m_accKey, m_secKey,
-        0 /* contentMd5 */, contentType, makePublic, useSrvEncrypt,
+        contentMd5, contentType, makePublic, useSrvEncrypt,
         request->httpVerb(), bucketName, key, m_storType,
         &request->headers );
 
@@ -2516,7 +2576,7 @@ WsConnection::prepare( WsRequest *request, const char *bucketName, const char *k
 void
 WsConnection::init( WsRequest *request, const char *bucketName, const char *key, 
                       const char *keySuffix, const char *contentType, 
-                      bool makePublic,  bool useSrvEncrypt )
+                      bool makePublic,  bool useSrvEncrypt, const char *contentMd5 )
 {
     dbgAssert( bucketName );
 
@@ -2524,7 +2584,7 @@ WsConnection::init( WsRequest *request, const char *bucketName, const char *key,
     std::string escapedKey;
     composeUrl( m_baseUrl, bucketName, key, keySuffix, &url, &escapedKey );
 
-    prepare( request, bucketName, key ? escapedKey.c_str() : NULL, contentType, makePublic, useSrvEncrypt );
+    prepare( request, bucketName, key ? escapedKey.c_str() : NULL, contentType, makePublic, useSrvEncrypt, contentMd5 );
 
     request->setUrl( url.c_str() );
 }
@@ -3144,6 +3204,39 @@ WsConnection::completeDel( WsDelResponse *response )
     LOG_TRACE( "leave completeDel: conn=0x%llx", ( UInt64 )this );
 }
 
+#if ENABLE_MULTIPLE_DELETE
+char *createMultipleDelXml(std::vector< WsObject > &objects, size_t *result_size, unsigned char *md5Hash) {
+    xmlBufferPtr buf = xmlBufferCreate();
+    if (buf == NULL) {
+        std::cerr << "testXmlwriterMemory: Error creating the xml buffer" << std::endl;
+        return 0;
+    }
+    xmlTextWriterPtr writer = xmlNewTextWriterMemory(buf, 0);
+    if (writer == NULL) {
+        std::cerr << "testXmlwriterMemory: Error creating the xml writer\n" << std::endl;
+        return 0;
+    }
+    int rc = xmlTextWriterStartDocument(writer, NULL, "UTF-8", NULL);
+    if (rc < 0) {
+        std::cerr << "testXmlwriterFilename: Error at xmlTextWriterStartElement\n" << std::endl;
+        return 0;
+    }
+    xmlTextWriterStartElement(writer, BAD_CAST "Delete");
+    xmlTextWriterWriteElement(writer, BAD_CAST "Quiet", BAD_CAST "true");
+    for( int i = 0; i < objects.size(); ++i )
+    {
+        xmlTextWriterStartElement(writer, BAD_CAST "Object");
+        xmlTextWriterWriteElement(writer, BAD_CAST "Key", BAD_CAST objects[i].key.c_str());
+        xmlTextWriterEndElement(writer);
+    }
+    xmlTextWriterEndElement(writer);
+    xmlTextWriterEndDocument(writer);
+    MD5(buf->content, buf->use, md5Hash);
+    *result_size = buf->use;
+    return reinterpret_cast< char * >( buf->content ); // FIXME
+}
+#endif
+
 void
 WsConnection::delAll( const char *bucketName, const char *prefix, unsigned int maxKeysInBatch )
 {
@@ -3160,10 +3253,28 @@ WsConnection::delAll( const char *bucketName, const char *prefix, unsigned int m
         listObjects( bucketName, prefix, response.nextMarker.c_str(), 
             NULL /* delimiter*/, maxKeysInBatch, &objects, &response );
 
+
+#if ENABLE_MULTIPLE_DELETE
+        size_t resultSize;
+        unsigned char md5Hash[MD5_DIGEST_LENGTH];
+        char* requestBody = createMultipleDelXml(objects, &resultSize, md5Hash);
+        std::string md5HashBase64;
+        append64Encoded(&md5HashBase64, md5Hash, MD5_DIGEST_LENGTH);
+        WsMultipleDelRequest request( bucketName, static_cast< const void * > ( requestBody ), resultSize );
+        std::stringstream key;
+        key << bucketName << "?delete";
+        init( &request, key.str().c_str(), 0, 0,
+            0, false, false, md5HashBase64.c_str() );
+
+        WsResponseDetails &responseDetails = request.execute();
+        handleErrors( responseDetails );
+#else
         for( int i = 0; i < objects.size(); ++i )
         {
             del( bucketName, objects[i].key.c_str() );
+
         }
+#endif
         objects.clear();
     }
     while( response.isTruncated );

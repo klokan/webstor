@@ -707,7 +707,7 @@ public:
 
    /// Maximum number of WsConnection's waitAny(..) supports.
 
-   enum { c_maxWaitAny = 64 };
+   enum { c_maxWaitAny = 256 };
 
    ///@brief Waits for any WsConnection to complete async operation, returns -1 if timeout.
    ///@details <b>startFrom</b> specifies connection index to start the check from.
@@ -736,11 +736,11 @@ private:
 
     void            prepare( WsRequest *request, const char *bucketName, const char *key,
                         const char *contentType = NULL,
-                        bool makePublic = false, bool useSrvEncrypt = false );
+                        bool makePublic = false, bool useSrvEncrypt = false, const char *contentMd5 = 0 );
 
     void            init( WsRequest *request, const char *bucketName, const char *key, 
                         const char *keySuffix = NULL, const char *contentType = NULL, 
-                        bool makePublic = false, bool useSrvEncrypt = false );
+                        bool makePublic = false, bool useSrvEncrypt = false, const char *contentMd5 = 0 );
 
     void            put( WsRequest *request, const char *bucketName, const char *key, 
                         const char *uploadId, int partNumber, 

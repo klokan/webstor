@@ -28,6 +28,12 @@
 #include <string>
 #include <vector>
 
+#define USE_PEVENTS 1
+
+#if USE_PEVENTS
+#include "pevents.h"
+#endif
+
 namespace webstor
 {
 
@@ -218,7 +224,7 @@ public:
     // Waits for any, returns -1 if timeout.
     // count must be <= c_maxEventCount.
 
-    enum { c_maxEventCount = 64 };
+    enum { c_maxEventCount = 256 };
 
     static int      waitAny( EventSync **events, size_t count, UInt32 msTimeout = c_infinite ); 
 
@@ -229,7 +235,11 @@ private:
 #ifdef _WIN32
     void           *m_handle;
 #else
+#if USE_PEVENTS
+    neosmart::neosmart_event_t m_handle;
+#else
     int             m_handle;
+#endif
 #endif
 };
 
@@ -248,39 +258,7 @@ class ExLockSync
     };
 
 #else  // !_WIN32
-
-    union Data      // Stub for pthread_mutex_t
-    {
-        struct
-        {
-            int         reserved1_;
-            unsigned    reserved2_;
-            int         reserved3_;
-#if __WORDSIZE == 64
-            unsigned    reserved4_;
-#endif
-            int         reserved5_;
-#if __WORDSIZE == 64
-            int         reserved6_;
-            void *      reserved7_;
-#else  // __WORDSIZE != 64
-            unsigned    reserved6_;
-
-            __extension__ union
-            {
-                int     reserved7_;
-                void *  reserved8_;
-            };
-#endif  // __WORDSIZE != 64
-        } reserved9_;
-#if __WORDSIZE == 64
-        char        reserved10_[ 40 ];
-#else
-        char        reserved10_[ 24 ];
-#endif
-        long        reserved11_;
-    };
-
+    typedef pthread_mutex_t Data;
 #endif  // !_WIN32
 public:
                     ExLockSync();
@@ -394,7 +372,7 @@ setSocketBuffers( SocketHandle socket, UInt32 size );
 #ifdef _WIN32
 typedef void * TaskHandle;
 #else
-typedef unsigned long TaskHandle;
+typedef pthread_t TaskHandle;
 #endif
 
 struct TaskCtrlDeleter

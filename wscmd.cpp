@@ -24,6 +24,7 @@
 
 #include "sysutils.h"
 #include "wsconn.h"
+#include "directory.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -33,10 +34,18 @@
 #include <iostream>
 #include <string>
 #include <vector>
+#include <new>
 
 #ifdef _WIN32 
 #define snprintf sprintf_s 
-#endif 
+#endif
+
+#define ENABLE_MBTILES_UPLOAD 1
+
+#if ENABLE_MBTILES_UPLOAD
+#include <sstream>
+#include "mbtiles.h"
+#endif
 
 using namespace webstor;
 using namespace webstor::internal;
@@ -50,9 +59,9 @@ static const size_t MB = 1024 * 1024;
 
 static StringWithLen s_cmdFlags = 
 #ifdef WS_CMD_CLI_COMPAT
-    { STRING_WITH_LEN( "-i -s -H -U -P -G -a -f -n -p -m -x -d -z -b -v -help --help -? --? -W -k" ) };
+    { STRING_WITH_LEN( "-i -s -H -U -P -R -G -a -f -n -p -m -x -d -z -b -v -help --help -? --? -W -k" ) };
 #else
-    { STRING_WITH_LEN( "-i -s -H -U -P -G -a -f -n -p -m -x -d -z -b -v -help --help -? --?" ) };
+    { STRING_WITH_LEN( "-i -s -H -U -P -R -G -a -f -n -p -m -x -d -z -b -v -help --help -? --?" ) };
 #endif
 
 static void
@@ -68,6 +77,8 @@ usage()
         "    -H optional region-specific endpoint or a mandatory Walrus host name,      \n"
         "       (it can be specified via WS_HOST env. variable)                         \n"
         "    -P optional port number,                                                   \n"
+        "    -R number of simultaneous asynchronous requests,                           \n"
+        "    -T number of threads,                                                      \n"
         "    -U (optional flag to use HTTP instead of HTTPS),                           \n"
         "    -G optional proxy with port number (proxy:port),                           \n"
         "       (it can be specified via WS_PROXY env. variable)                        \n"
@@ -82,6 +93,9 @@ usage()
         "       listAllObjects                                                          \n"
         "       listAllMultipartUploads                                                 \n"
         "       abortAllMultipartUploads                                                \n"
+#if ENABLE_MBTILES_UPLOAD
+        "       uploadMBTiles                                                           \n"
+#endif
         "                                                                               \n"
         "    action-specific parameters, some of them mandatory depending on action:    \n"
         "                                                                               \n"
@@ -127,6 +141,11 @@ usage()
         " * upload a file:                                                              \n"
         "   wscmd -i WS_ACCESS_KEY -s WS_SECRET_KEY -a put -n mybucket                  \n"
         "   -f image.jpg -p folder/image.jpg -v                                         \n"
+#if ENABLE_MBTILES_UPLOAD
+        "                                                                               \n"
+        " * upload tiles from MBTile file:                                              \n"
+        "   wscmd -i WS_ACCESS_KEY -s WS_SECRET_KEY -a uploadMBTiles -f tiles.mbtiles   \n"
+#endif
         "                                                                               \n"
         " * upload a large file using multipart upload:                                 \n"
         "   wscmd -i WS_ACCESS_KEY -s WS_SECRET_KEY -a put -n mybucket                  \n"
@@ -168,6 +187,7 @@ struct Options
         , showUsage( false ) 
         , verbose( false )
         , maxKeys( 0 )
+        , requests ( 5 )
     {}
 
     std::string accKey;
@@ -182,6 +202,8 @@ struct Options
     std::string prefix;
     std::string marker;
     size_t maxKeys;
+    size_t requests;
+    size_t threads;
     std::string delimiter;
     size_t chunkSize;
     bool makePublic;
@@ -331,6 +353,8 @@ parseCommandLine( int argc, char **argv, Options *options )
             tryGetValue( "-H", &i, argc, argv, &options->host ) ||
             tryGetValue( "-U", &i, argc, argv, &options->isHttps, false ) ||
             tryGetValue( "-P", &i, argc, argv, &options->port ) ||
+            tryGetValue( "-R", &i, argc, argv, &options->requests ) ||
+            tryGetValue( "-T", &i, argc, argv, &options->threads ) ||
             tryGetValue( "-G", &i, argc, argv, &options->proxy ) ||
             tryGetValue( "-a", &i, argc, argv, &options->action ) ||
             tryGetValue( "-f", &i, argc, argv, &options->filename ) ||
@@ -932,6 +956,124 @@ get( WsConnection *conn, const Options &options, Statistics *stat )
     stat->dataTransfered = response.loadedContentLength;
 }
 
+struct Upload {
+    std::string *filepath;
+    char *buffer;
+    
+    Upload():filepath(0),buffer(0){}
+  
+};
+
+static void
+uploadFilesInDirectory( WsConfig config, const Options &options, Statistics *stat ) {
+    AsyncMan asyncMan(options.threads);
+    webstor::PosixDirectoryReader directoryReader;
+    const int connections_count = options.requests;
+    std::vector<WsConnection *> connections(connections_count);
+    std::vector<Upload> uploads(connections_count);
+    for (int i = 0; i!= connections_count; i++) {
+        connections[i] = new WsConnection( config );
+    }
+    std::vector< std::string * > *files = new std::vector< std::string * >();
+    directoryReader.listFiles( options.filename, files );
+    int iteration = 0;
+    for (std::vector< std::string * >::iterator iter = files->begin(); iter != files->end(); iter++)
+    {
+        iteration++;
+        Upload upload;
+        upload.filepath = new std::string(**iter);
+        std::ifstream is;
+        is.open( upload.filepath->c_str(), std::ifstream::in | std::ifstream::binary );
+        is.seekg (0, std::ios::end);
+        size_t length = is.tellg();
+        is.seekg (0, std::ios::beg);
+        upload.buffer = new char [length];
+        is.read (upload.buffer, length);
+        is.close();
+        int index = WsConnection::waitAny( &connections[0], connections_count, (iteration % connections_count));
+        dbgAssert( index >= 0 && index < connections_count );
+        if (connections[index]->isAsyncPending()) {
+            WsPutResponse response;
+            connections[index]->completePut(&response);
+            Upload cleanMe = uploads[index];
+            if (cleanMe.filepath != NULL) {
+                delete cleanMe.filepath;
+                cleanMe.filepath = NULL;
+            }
+            if (cleanMe.buffer != NULL) {
+                delete[] cleanMe.buffer;
+                cleanMe.buffer = NULL;
+            }
+        }
+        connections[index]->pendPut(&asyncMan, options.bucketName.c_str(), upload.filepath->c_str(),
+            static_cast< const void * >( upload.buffer ), length,
+            options.makePublic, false );
+        uploads[index] = upload;
+    }
+    for (std::vector< WsConnection * >::iterator iter = connections.begin(); iter != connections.end(); iter++) {
+        WsPutResponse response;
+        if ((*iter)->isAsyncPending()) {
+            (*iter)->completePut(&response);
+        }
+    }
+}
+
+#if ENABLE_MBTILES_UPLOAD
+static void
+uploadMBTiles( WsConfig config, const Options &options, Statistics *stat ) {
+    AsyncMan asyncMan(options.threads);
+    const int connections_count = options.requests;
+    std::vector<WsConnection *> connections(connections_count);
+    std::vector<Upload> uploads(connections_count);
+    for (int i = 0; i!= connections_count; i++) {
+        connections[i] = new WsConnection( config );
+    }
+    MBTilesIterator *iter;
+    MBTilesMetadata metadata;
+    MBTile tile;
+    int res = mbtiles_iterator_new(&iter, &metadata, options.filename.c_str());
+    if (res != 0) {
+        std::cerr << "File " << options.filename << " can't be opened as MBTiles database." << std::endl;
+        return;
+    }
+    int iteration = 0;
+    while (!mbtiles_iterator_finished(iter)) {
+        mbtiles_iterator_get(iter, &tile);
+        std::stringstream ss;
+        int zoom = tile.zoom_level;
+        int col = tile.column;
+        int row = ( 2 << ( zoom - 1) ) - tile.row;
+        ss << zoom << '/' << col << '/' << row << "." << metadata.format;
+        std::cout << ss.str() << std::endl;
+        Upload upload;
+        upload.filepath = new std::string(ss.str());
+        upload.buffer = new char[tile.data_size];
+        memcpy(upload.buffer, tile.data, tile.data_size);
+	free((void*) tile.data);
+        int index = WsConnection::waitAny( &connections[0], connections_count, (iteration % connections_count));
+        dbgAssert( index >= 0 && index < connections_count );
+        if (connections[index]->isAsyncPending()) {
+            WsPutResponse response;
+            connections[index]->completePut(&response);
+            Upload cleanMe = uploads[index];
+            if (cleanMe.filepath != NULL) {
+                delete cleanMe.filepath;
+                cleanMe.filepath = NULL;
+            }
+            if (cleanMe.buffer != NULL) {
+                delete[] cleanMe.buffer;
+                cleanMe.buffer = NULL;
+            }
+        }
+        connections[index]->pendPut(&asyncMan, options.bucketName.c_str(), upload.filepath->c_str(),
+            static_cast< const void * >( upload.buffer ), tile.data_size,
+            options.makePublic, false );
+        uploads[index] = upload;
+        iteration++;
+    }
+}
+#endif
+
 //////////////////////////////////////////////////////////////////////////////
 // Execute actions.
 
@@ -1008,7 +1150,13 @@ execute( const Options &options, Statistics *stat )
 #endif
         )
     {        
-        put( &conn, options, stat );
+        // Check if the file is directory
+        DirectoryReader directoryReader;
+        if ( directoryReader.isDirectory( options.filename ) ) {
+            uploadFilesInDirectory( config, options, stat );
+        } else {
+            put( &conn, options, stat );
+        }
         return;
     }
 
@@ -1058,6 +1206,14 @@ execute( const Options &options, Statistics *stat )
         conn.abortAllMultipartUploads( options.bucketName.c_str(), options.prefix.c_str() );
         return;
     }
+    
+#if ENABLE_MBTILES_UPLOAD
+    if( !strcmp( options.action.c_str(), "uploadMBTiles" ) )
+    {
+         uploadMBTiles( config, options, stat );
+	 return;
+    }
+#endif
 
     // Unknown action.
 
