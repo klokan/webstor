@@ -1,5 +1,5 @@
 //////////////////////////////////////////////////////////////////////////////
-// Copyright (c) 2011-2012, OblakSoft LLC.
+// Copyright (c) 2011-2013, OblakSoft LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -146,8 +146,36 @@ static const char
 
     static const char *s_certs[] =
     {
-        // Verisign Class 3 Public Primary Certification Authority - G2.
+        // VeriSign Class 3 Public Primary Certification Authority - G5
         // * US Standard (s3.amazonaws.com:443)
+
+        "-----BEGIN CERTIFICATE-----\n"
+        "MIIE0zCCA7ugAwIBAgIQGNrRniZ96LtKIVjNzGs7SjANBgkqhkiG9w0BAQUFADCByjELMAkGA1UE\n"
+        "BhMCVVMxFzAVBgNVBAoTDlZlcmlTaWduLCBJbmMuMR8wHQYDVQQLExZWZXJpU2lnbiBUcnVzdCBO\n"
+        "ZXR3b3JrMTowOAYDVQQLEzEoYykgMjAwNiBWZXJpU2lnbiwgSW5jLiAtIEZvciBhdXRob3JpemVk\n"
+        "IHVzZSBvbmx5MUUwQwYDVQQDEzxWZXJpU2lnbiBDbGFzcyAzIFB1YmxpYyBQcmltYXJ5IENlcnRp\n"
+        "ZmljYXRpb24gQXV0aG9yaXR5IC0gRzUwHhcNMDYxMTA4MDAwMDAwWhcNMzYwNzE2MjM1OTU5WjCB\n"
+        "yjELMAkGA1UEBhMCVVMxFzAVBgNVBAoTDlZlcmlTaWduLCBJbmMuMR8wHQYDVQQLExZWZXJpU2ln\n"
+        "biBUcnVzdCBOZXR3b3JrMTowOAYDVQQLEzEoYykgMjAwNiBWZXJpU2lnbiwgSW5jLiAtIEZvciBh\n"
+        "dXRob3JpemVkIHVzZSBvbmx5MUUwQwYDVQQDEzxWZXJpU2lnbiBDbGFzcyAzIFB1YmxpYyBQcmlt\n"
+        "YXJ5IENlcnRpZmljYXRpb24gQXV0aG9yaXR5IC0gRzUwggEiMA0GCSqGSIb3DQEBAQUAA4IBDwAw\n"
+        "ggEKAoIBAQCvJAgIKXo1nmAMqudLO07cfLw8RRy7K+D+KQL5VwijZIUVJ/XxrcgxiV0i6CqqpkKz\n"
+        "j/i5Vbext0uz/o9+B1fs70PbZmIVYc9gDaTY3vjgw2IIPVQT60nKWVSFJuUrjxuf6/WhkcIzSdhD\n"
+        "Y2pSS9KP6HBRTdGJaXvHcPaz3BJ023tdS1bTlr8Vd6Gw9KIl8q8ckmcY5fQGBO+QueQA5N06tRn/\n"
+        "Arr0PO7gi+s3i+z016zy9vA9r911kTMZHRxAy3QkGSGT2RT+rCpSx4/VBEnkjWNHiDxpg8v+R70r\n"
+        "fk/Fla4OndTRQ8Bnc+MUCH7lP59zuDMKz10/NIeWiu5T6CUVAgMBAAGjgbIwga8wDwYDVR0TAQH/\n"
+        "BAUwAwEB/zAOBgNVHQ8BAf8EBAMCAQYwbQYIKwYBBQUHAQwEYTBfoV2gWzBZMFcwVRYJaW1hZ2Uv\n"
+        "Z2lmMCEwHzAHBgUrDgMCGgQUj+XTGoasjY5rw8+AatRIGCx7GS4wJRYjaHR0cDovL2xvZ28udmVy\n"
+        "aXNpZ24uY29tL3ZzbG9nby5naWYwHQYDVR0OBBYEFH/TZafC3ey78DAJ80M5+gKvMzEzMA0GCSqG\n"
+        "SIb3DQEBBQUAA4IBAQCTJEowX2LP2BqYLz3q3JktvXf2pXkiOOzEp6B4Eq1iDkVwZMXnl2YtmAl+\n"
+        "X6/WzChl8gGqCBpH3vn5fJJaCGkgDdk+bW48DW7Y5gaRQBi5+MHt39tBquCWIMnNZBU4gcmU7qKE\n"
+        "KQsTb47bDN0lAtukixlE0kF6BWlKWE9gyn6CagsCqiUXObXbf+eEZSqVir2G3l6BFoMtEMze/aiC\n"
+        "Km0oHw0LxOXnGiYZ4fQRbxC1lfznQgUy286dUV4otp6F01vvpX1FQHKOtw5rDgb7MzVIcbidJ4vE\n"
+        "ZV8NhnacRHr2lVz2XTIIM6RUthg/aFzyQkqFOFSDX9HoLPKsEdao7WNq\n"
+        "-----END CERTIFICATE-----\n",
+
+        // Verisign Class 3 Public Primary Certification Authority - G2.
+        // * US Standard (s3.amazonaws.com:443) - before 10/02/2013
 
         "-----BEGIN CERTIFICATE-----\n"
         "MIIDAjCCAmsCEH3Z/gfPqB63EHln+6eJNMYwDQYJKoZIhvcNAQEFBQAwgcExCzAJBgNVBAYTAlVT\n"
@@ -532,7 +560,7 @@ appendRequestHeader( const char *key, const char *value, ScopedCurlList *plist )
 
 static void
 setRequestHeaders( const std::string &accKey, const std::string &secKey,
-    const char *contentMd5, const char *contentType, bool makePublic, bool srvEncrypt,
+    const char *contentMd5, const char *contentType, unsigned cacheMaxAge, bool makePublic, bool srvEncrypt,
     const char *action, const char *bucketName, const char *key, WsStorType storType, 
     ScopedCurlList *plist )
 {
@@ -595,6 +623,15 @@ setRequestHeaders( const std::string &accKey, const std::string &secKey,
     //        converted to "Connection:" by Fiddler.
     //        Without Fiddler, there should be exactly one "Connection: Keep-Alive".
     //        Having 2 with Fiddler seems fine as well.
+
+    if( cacheMaxAge != WsConnection::c_noCacheControl )
+    {
+        std::string cacheControl( "public, max-age=" );
+        char maxAge[ 16 ];
+        uitoa( cacheMaxAge, maxAge );
+        cacheControl += maxAge;
+        appendRequestHeader( "Cache-Control", cacheControl.c_str(), plist );
+    }
 
     appendRequestHeader( "Content-MD5", contentMd5, plist );
     appendRequestHeader( "Content-Type", contentType, plist );
@@ -2412,7 +2449,7 @@ writeNoop( const void *chunkData, size_t count, size_t elementSize, void *ctx ) 
 
 void
 WsConnection::prepare( WsRequest *request, const char *bucketName, const char *key,
-        const char *contentType, bool makePublic, bool useSrvEncrypt )
+        const char *contentType, unsigned cacheMaxAge, bool makePublic, bool useSrvEncrypt )
 {
     dbgAssert( !m_asyncRequest ); // some async operation is in progress, need to complete/cancel it first 
                                   // before starting a new one.
@@ -2502,7 +2539,7 @@ WsConnection::prepare( WsRequest *request, const char *bucketName, const char *k
     // to curl.
 
     setRequestHeaders( m_accKey, m_secKey,
-        0 /* contentMd5 */, contentType, makePublic, useSrvEncrypt,
+        0 /* contentMd5 */, contentType, cacheMaxAge, makePublic, useSrvEncrypt,
         request->httpVerb(), bucketName, key, m_storType,
         &request->headers );
 
@@ -2515,7 +2552,7 @@ WsConnection::prepare( WsRequest *request, const char *bucketName, const char *k
 
 void
 WsConnection::init( WsRequest *request, const char *bucketName, const char *key, 
-                      const char *keySuffix, const char *contentType, 
+                      const char *keySuffix, const char *contentType, unsigned cacheMaxAge,
                       bool makePublic,  bool useSrvEncrypt )
 {
     dbgAssert( bucketName );
@@ -2524,7 +2561,7 @@ WsConnection::init( WsRequest *request, const char *bucketName, const char *key,
     std::string escapedKey;
     composeUrl( m_baseUrl, bucketName, key, keySuffix, &url, &escapedKey );
 
-    prepare( request, bucketName, key ? escapedKey.c_str() : NULL, contentType, makePublic, useSrvEncrypt );
+    prepare( request, bucketName, key ? escapedKey.c_str() : NULL, contentType, cacheMaxAge, makePublic, useSrvEncrypt );
 
     request->setUrl( url.c_str() );
 }
@@ -2542,7 +2579,7 @@ WsConnection::createBucket( const char *bucketName,  bool makePublic )
 
         WsPutRequest request( bucketName );
         init( &request, bucketName, NULL /* key */, NULL /* keySuffix */,
-            NULL /* contentType */, makePublic );
+            NULL /* contentType */, c_noCacheControl, makePublic );
 
         // Construct payload with region name.
 
@@ -2627,7 +2664,8 @@ completePut( WsResponseDetails &responseDetails, WsPutResponse *response )
 void
 WsConnection::put( WsRequest *request, const char *bucketName, const char *key, 
                   const char *uploadId, int partNumber,
-                  bool makePublic, bool useSrvEncrypt, const char *contentType,
+                  const char *contentType, unsigned cacheMaxAge,
+                  bool makePublic, bool useSrvEncrypt,
                   WsPutResponse *response )
 {
     dbgAssert( request );
@@ -2647,7 +2685,7 @@ WsConnection::put( WsRequest *request, const char *bucketName, const char *key,
     }
 
     init( request, bucketName, key, uploadId ? keySuffix.c_str() : NULL, 
-        contentType ? contentType : s_contentTypeBinary, makePublic, useSrvEncrypt );
+        contentType ? contentType : s_contentTypeBinary, cacheMaxAge, makePublic, useSrvEncrypt );
 
     // Execute the request.
 
@@ -2660,7 +2698,8 @@ WsConnection::put( WsRequest *request, const char *bucketName, const char *key,
 
 void
 WsConnection::put( const char *bucketName, const char *key, const void *data, 
-    size_t size, bool makePublic, bool useSrvEncrypt, const char *contentType, WsPutResponse *response )
+    size_t size, const char *contentType, unsigned cacheMaxAge, bool makePublic, bool useSrvEncrypt,
+    WsPutResponse *response )
 {
     dbgAssert( bucketName );
     dbgAssert( implies( size, data ) );
@@ -2672,7 +2711,7 @@ WsConnection::put( const char *bucketName, const char *key, const void *data,
     {
         WsPutRequest request( key, data, size );
         put( &request, bucketName, key, NULL /* uploadId */, 0 /* partNumber */,
-            makePublic, useSrvEncrypt, contentType, response );
+            contentType, cacheMaxAge, makePublic, useSrvEncrypt, response );
     }
     catch( ... )
     {
@@ -2685,7 +2724,8 @@ WsConnection::put( const char *bucketName, const char *key, const void *data,
 
 void 
 WsConnection::put( const char *bucketName, const char *key, WsPutRequestUploader *uploader, 
-    size_t totalSize, bool makePublic, bool useSrvEncrypt, const char *contentType, WsPutResponse *response )
+    size_t totalSize, const char *contentType, unsigned cacheMaxAge, bool makePublic, bool useSrvEncrypt,
+    WsPutResponse *response )
 {
     dbgAssert( bucketName );
     dbgAssert( uploader );
@@ -2697,7 +2737,7 @@ WsConnection::put( const char *bucketName, const char *key, WsPutRequestUploader
     {
         WsPutRequest request( key, uploader, totalSize );
         put( &request, bucketName, key, NULL /* uploadId */, 0 /* partNumber */,
-            makePublic, useSrvEncrypt, contentType, response );
+            contentType, cacheMaxAge, makePublic, useSrvEncrypt, response );
     }
     catch( ... )
     {
@@ -2726,7 +2766,7 @@ WsConnection::pendPut( AsyncMan *asyncMan, const char *bucketName,
         // Initialize Put request.
 
         std::auto_ptr< WsPutRequest > request( new WsPutRequest( key, data, size ) );
-        init( request.get(), bucketName, key, NULL /* keySuffix */, s_contentTypeBinary, makePublic, useSrvEncrypt );
+        init( request.get(), bucketName, key, NULL /* keySuffix */, s_contentTypeBinary, c_noCacheControl, makePublic, useSrvEncrypt );
 
         // Start async.
 
@@ -3173,7 +3213,8 @@ WsConnection::delAll( const char *bucketName, const char *prefix, unsigned int m
 
 void 
 WsConnection::initiateMultipartUpload( const char *bucketName, const char *key, 
-                        bool makePublic, bool useSrvEncrypt, const char *contentType,
+                        const char *contentType, unsigned cacheMaxAge,
+                        bool makePublic, bool useSrvEncrypt,
                         WsInitiateMultipartUploadResponse *response /* out */  )
 {
     dbgAssert( bucketName );
@@ -3186,7 +3227,7 @@ WsConnection::initiateMultipartUpload( const char *bucketName, const char *key,
     {
         WsInitiateMultipartUploadRequest request( key );
         init( &request, bucketName, key, "?uploads" /* keySuffix */, 
-            contentType ? contentType : s_contentTypeBinary, makePublic, useSrvEncrypt );
+            contentType ? contentType : s_contentTypeBinary, cacheMaxAge, makePublic, useSrvEncrypt );
 
         WsResponseDetails &responseDetails = request.execute();  
         handleErrors( responseDetails );
@@ -3226,7 +3267,8 @@ WsConnection::putPart( const char *bucketName, const char *key, const char *uplo
 
         WsPutRequest request( key, data, size );
         put( &request, bucketName, key, uploadId, partNumber, 
-            false /* makePublic */, false /* useSrvEncrypt */, NULL /* contentType */, response );
+            NULL /* contentType */, c_noCacheControl, false /* makePublic */, false /* useSrvEncrypt */,
+            response );
         
         if( response )
         {
@@ -3264,7 +3306,8 @@ WsConnection::putPart( const char *bucketName, const char *key, const char *uplo
 
         WsPutRequest request( key, uploader, partSize );
         put( &request, bucketName, key, uploadId, partNumber, 
-            false /* makePublic */, false /* useSrvEncrypt */, NULL /* contentType */, response );
+            NULL /* contentType */, c_noCacheControl, false /* makePublic */, false /* useSrvEncrypt */,
+            response );
         
         if( response )
         {

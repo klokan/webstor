@@ -1,5 +1,5 @@
 //////////////////////////////////////////////////////////////////////////////
-// Copyright (c) 2011-2012, OblakSoft LLC.
+// Copyright (c) 2011-2013, OblakSoft LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -175,7 +175,7 @@ dbgTestWsConnection()
     WsConnection con2( config );
 
     con.put( bucketName, key, expected, expectedSize, 
-        false /* publicReadAcl */, false /* srvEncrypt */, "text/plain", &putResponse );
+        "text/plain", con.c_noCacheControl, false /* publicReadAcl */, false /* srvEncrypt */, &putResponse );
     con.pendPut( &asyncMan, bucketName, emptyKey, expected, 0 /* empty */, 
         true /* publicReadAcl */, false /* srvEncrypt */ );
     con2.pendPut( &asyncMan, bucketName, weirdKey, &expectedOne, 1, 
@@ -361,9 +361,9 @@ dbgTestWsConnection()
         WsInitiateMultipartUploadResponse initMultipartResponse;
         WsInitiateMultipartUploadResponse initMultipartWeirdKeyResponse;
         WsInitiateMultipartUploadResponse initMultipartEmptyKeyResponse;
-        con.initiateMultipartUpload( bucketName, key, false, false, "x-foo/x-bar", &initMultipartResponse );
-        con.initiateMultipartUpload( bucketName, weirdKey, false, false, NULL, &initMultipartWeirdKeyResponse );
-        con.initiateMultipartUpload( bucketName, emptyKey, false, false, NULL, &initMultipartEmptyKeyResponse );
+        con.initiateMultipartUpload( bucketName, key, "x-foo/x-bar", con.c_noCacheControl, false, false, &initMultipartResponse );
+        con.initiateMultipartUpload( bucketName, weirdKey, NULL, con.c_noCacheControl, false, false, &initMultipartWeirdKeyResponse );
+        con.initiateMultipartUpload( bucketName, emptyKey, NULL, con.c_noCacheControl, false, false, &initMultipartEmptyKeyResponse );
 
         WsListMultipartUploadsResponse listMultipartResponse;
         std::vector< WsMultipartUpload > uploads;

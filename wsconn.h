@@ -2,7 +2,7 @@
 #define INCLUDED_WSCONN_H
 
 //////////////////////////////////////////////////////////////////////////////
-// Copyright (c) 2011-2012, OblakSoft LLC.
+// Copyright (c) 2011-2013, OblakSoft LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -400,6 +400,10 @@ public:
 
     static const size_t c_multipartUploadMinPartSize = c_multipartUploadMinPartSizeMB * 1024 * 1024; 
 
+    /// Special value that instructs to not include Cache-Control header.
+
+    static const unsigned c_noCacheControl = -1;
+
     /// Constructs WsConnection.
 
                     WsConnection( const WsConfig &config );
@@ -431,7 +435,8 @@ public:
    /// uploads <b>data</b>.
 
    void             put( const char *bucketName, const char *key, const void *data, size_t size,
-                        bool makePublic = false, bool useSrvEncrypt = false, const char *contentType = NULL,
+                        const char *contentType = NULL, unsigned cacheMaxAge = c_noCacheControl,
+                        bool makePublic = false, bool useSrvEncrypt = false,
                         WsPutResponse *response = NULL /* out */ );
 
    ///@brief Synchronously creates a cloud storage object.
@@ -441,8 +446,9 @@ public:
    /// specified in <b>totalSize</b>.
 
    void             put( const char *bucketName, const char *key, WsPutRequestUploader *uploader, size_t totalSize,
-                       bool makePublic = false, bool useSrvEncrypt = false, const char *contentType = NULL,
-                       WsPutResponse *response = NULL /* out */ );
+                        const char *contentType = NULL, unsigned cacheMaxAge = c_noCacheControl,
+                        bool makePublic = false, bool useSrvEncrypt = false,
+                        WsPutResponse *response = NULL /* out */ );
 
    ///@brief Synchronously loads a cloud storage object.
    ///@details Fetches content of an object identified by a <b>key</b> from
@@ -536,7 +542,8 @@ public:
    /// by subsequent putPart(..) and completeMultipartUpload(..) methods.
 
    void             initiateMultipartUpload( const char *bucketName, const char *key, 
-                        bool makePublic = false, bool useSrvEncrypt = false, const char *contentType = NULL,
+                        const char *contentType = NULL, unsigned cacheMaxAge = c_noCacheControl,
+                        bool makePublic = false, bool useSrvEncrypt = false,
                         WsInitiateMultipartUploadResponse *response = NULL /* out */  );
 
    ///@brief Synchronously uploads a single part.
@@ -728,23 +735,24 @@ public:
 
    /// Enables HTTP tracing.
 
-   void             enableTracing( TraceCallback *traceCallback ) { m_traceCallback = traceCallback; }
+   void             enableTracing( TraceCallback *traceCallback ) { m_traceCallback = traceCallback; }  // nofail
 
 private:
                     WsConnection( const WsConnection & );  // forbidden
      WsConnection & operator=( const WsConnection & );  // forbidden
 
     void            prepare( WsRequest *request, const char *bucketName, const char *key,
-                        const char *contentType = NULL,
+                        const char *contentType = NULL, unsigned cacheMaxAge = c_noCacheControl,
                         bool makePublic = false, bool useSrvEncrypt = false );
 
     void            init( WsRequest *request, const char *bucketName, const char *key, 
-                        const char *keySuffix = NULL, const char *contentType = NULL, 
+                        const char *keySuffix = NULL, const char *contentType = NULL, unsigned cacheMaxAge = c_noCacheControl,
                         bool makePublic = false, bool useSrvEncrypt = false );
 
     void            put( WsRequest *request, const char *bucketName, const char *key, 
                         const char *uploadId, int partNumber, 
-                        bool makePublic, bool useSrvEncrypt, const char *contentType,
+                        const char *contentType, unsigned cacheMaxAge,
+                        bool makePublic, bool useSrvEncrypt,
                         WsPutResponse *response );
 
     void            del( const char *bucketName, const char *key, const char *keySuffix, 

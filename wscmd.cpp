@@ -1,5 +1,5 @@
 //////////////////////////////////////////////////////////////////////////////
-// Copyright (c) 2011-2012, OblakSoft LLC.
+// Copyright (c) 2011-2013, OblakSoft LLC.
 //
 // Licensed under the Apache License, Version 2.0 (the "License");
 // you may not use this file except in compliance with the License.
@@ -669,7 +669,8 @@ put( WsConnection *conn, StreamUploader *uploader, const Options &options )
     WsPutResponse response;
     conn->put( options.bucketName.c_str(), options.prefix.c_str(), 
         uploader, uploader->totalSize(),
-        options.makePublic, false /* useSrvEncrypt */, NULL /* contentType */,
+        NULL /* contentType */, conn->c_noCacheControl,
+        options.makePublic, false /* useSrvEncrypt */,
         &response );
 
     std::cout << "Uploaded: " << uploader->totalSize() << std::endl;
@@ -691,7 +692,8 @@ multiput( WsConnection *conn, StreamUploader *uploader, const Options &options )
 
     WsInitiateMultipartUploadResponse initResponse;
     conn->initiateMultipartUpload( options.bucketName.c_str(), options.prefix.c_str(),
-        options.makePublic, false /* useSrvEncrypt */, NULL /* contentType */,
+        NULL /* contentType */, conn->c_noCacheControl,
+        options.makePublic, false /* useSrvEncrypt */,
         &initResponse );
 
     std::vector< WsPutResponse > parts;
