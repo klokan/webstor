@@ -42,7 +42,7 @@ LIBRARIES=
 ### RULES ###
 
 CXXFLAGS+=$(DEFINES) $(INCLUDES) $(LIBRARIES) -Wno-enum-compare
-LOADLIBES+=-lcurl -lssl -lxml2
+LOADLIBES+=-lcurl -lssl -lxml2 -lpthread -lcrypto
 
 .PHONY: all
 all: wsdbg wsperf wscmd
